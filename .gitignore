@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyCharm
+.idea/
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.env/
+
+# Environment variables (keep these private)
+.env
+config.ini
+
+# Database files (backup separately)
+*.db
+*.sqlite3
+*.sql
+
+# Logs
+*.log
+logs/
+
+# Data files (your scraped data)
+*.csv
+*.xlsx
+scraped_data/
+data/
+output/
+
+# Flask specific
+instance/
+.webassets-cache
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+```
+
+5. Save the file (`Ctrl+S`)
+
+## **Step 3: Make Your First Commit**
+
+Now let's commit all your project files:
+
+**In PyCharm:**
+1. Press `Ctrl+K` (or go to `VCS → Commit`)
+2. You'll see the **Git Commit dialog** with all your project files listed
+3. **Check the files you want to include** - typically everything except what .gitignore excludes
+4. In the **commit message box** at the bottom, type something like:
+```
+   Initial commit - project setup
