@@ -234,7 +234,8 @@ def load_graph(conn: sqlite3.Connection) -> dict:
     cur = conn.cursor()
     G = {}
 
-    cur.execute("SELECT definition, answer FROM definition_answers")
+    cur.execute("SELECT definition, answer FROM definition_answers_augmented")
+    #cur.execute("SELECT definition, answer FROM definition_answers")
     for d, ans in cur.fetchall():
         add_pair(G, d, ans)
 

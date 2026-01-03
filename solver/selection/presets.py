@@ -6,7 +6,7 @@
 
 CRITERIA_RANDOM = {
     "source": "clues",
-    "limit": 1000,
+    "limit": 10000,
     "order": "random",
 }
 
