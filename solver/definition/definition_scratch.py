@@ -1,142 +1,147 @@
 #!/usr/bin/env python3
 """
-Analyze the answer_word_frequency.csv file without loading it entirely.
-Shows samples, statistics, and top entries to validate the data.
+Debug script for the UNICORNS clue evidence issue.
+
+Analyzes why "cousins" isn't getting strong evidence while "at + sea" is.
 """
 
-import csv
-import os
-from collections import defaultdict, Counter
-from pathlib import Path
+from anagram_evidence_system import ComprehensiveWordplayDetector
 
 
-def analyze_csv_file(csv_path):
-    """Analyze the CSV file with sampling to avoid memory issues."""
+def debug_unicorns_clue():
+    """Debug the UNICORNS clue evidence detection."""
 
-    if not os.path.exists(csv_path):
-        print(f"ERROR: File not found: {csv_path}")
-        return
+    # Use the database path
+    db_path = r"C:\Users\shute\PycharmProjects\cryptic_solver\data\cryptic_new.db"
+    detector = ComprehensiveWordplayDetector(db_path=db_path)
 
-    file_size = os.path.getsize(csv_path) / (1024 * 1024)  # MB
-    print(f"File size: {file_size:.1f} MB")
-    print("=" * 50)
+    clue = "Creatures shown by navy netted by cousin at sea (8)"
 
-    # Counters for analysis
-    total_rows = 0
-    answer_counts = Counter()
-    word_counts = Counter()
-    high_frequency_words = []
-    sample_data = []
+    # Test specific candidates
+    candidates = ["UNICORNS", "lambaste", "manatees"]
 
-    print("Scanning file (sampling every 1000th row)...")
+    print("=" * 80)
+    print(f"🔍 DEBUG ANALYSIS: {clue}")
+    print("=" * 80)
 
-    with open(csv_path, 'r', encoding='utf-8') as file:
-        reader = csv.DictReader(file)
+    # Show what indicators are detected
+    indicators = detector.detect_wordplay_indicators(clue)
+    print(f"DETECTED INDICATORS: {indicators}")
 
-        for i, row in enumerate(reader):
-            total_rows += 1
+    # Test each candidate with full debug output
+    for candidate in candidates:
+        print(f"\n{'=' * 60}")
+        print(f"🎯 TESTING CANDIDATE: {candidate}")
+        print(f"{'=' * 60}")
 
-            answer = row['answer']
-            word = row['word']
-            count = int(row['count'])
+        evidence = detector.test_anagram_evidence(candidate, clue, indicators, debug=True)
 
-            # Full counting for answers and words
-            answer_counts[answer] += count
-            word_counts[word] += count
-
-            # Sample every 1000th row for detailed viewing
-            if i % 1000 == 0:
-                sample_data.append((answer, word, count))
-
-            # Track high-frequency word instances
-            if count >= 10:
-                high_frequency_words.append((answer, word, count))
-
-            # Progress update
-            if total_rows % 100000 == 0:
-                print(f"  Processed {total_rows:,} rows...")
-
-    print(f"\nFile Analysis Complete!")
-    print(f"Total rows: {total_rows:,}")
-    print(f"Unique answers: {len(answer_counts):,}")
-    print(f"Unique words: {len(word_counts):,}")
-
-    # Top answers by total word frequency
-    print(f"\nTop 15 answers by total word occurrences:")
-    for i, (answer, total_count) in enumerate(answer_counts.most_common(15)):
-        print(f"  {i + 1:2d}. {answer:12s} - {total_count:,} total occurrences")
-
-    # Most common words across all clues
-    print(f"\nTop 20 most common words across all clues:")
-    for i, (word, total_count) in enumerate(word_counts.most_common(20)):
-        print(f"  {i + 1:2d}. '{word:12s}' - {total_count:,} occurrences")
-
-    # High-frequency word-answer pairs
-    high_frequency_words.sort(key=lambda x: x[2], reverse=True)
-    print(f"\nTop 20 highest frequency word-answer pairs:")
-    for i, (answer, word, count) in enumerate(high_frequency_words[:20]):
-        print(f"  {i + 1:2d}. {answer:10s} + '{word:12s}' = {count:3d} times")
-
-    # Sample data for validation
-    print(f"\nSample data (every 1000th row):")
-    for i, (answer, word, count) in enumerate(sample_data[:15]):
-        print(f"  {answer:10s}, {word:15s}, {count:3d}")
-
-    return {
-        'total_rows': total_rows,
-        'unique_answers': len(answer_counts),
-        'unique_words': len(word_counts),
-        'top_answers': answer_counts.most_common(10),
-        'top_words': word_counts.most_common(10)
-    }
+        if evidence:
+            boost = detector.calculate_anagram_score_boost(evidence)
+            print(f"\n🎯 EVIDENCE SUMMARY for {candidate}:")
+            print(f"  Type: {evidence.evidence_type}")
+            print(f"  Fodder: {' + '.join(evidence.fodder_words)}")
+            print(f"  Confidence: {evidence.confidence:.2f}")
+            print(f"  Score boost: +{boost:.1f}")
+            if evidence.needed_letters:
+                print(f"  Needed letters: '{evidence.needed_letters}'")
+        else:
+            print(f"\n❌ NO EVIDENCE FOUND for {candidate}")
 
 
-def lookup_answer_words(csv_path, target_answer, top_n=20):
-    """Look up all words for a specific answer."""
+def test_direct_combinations():
+    """Test specific word combinations directly."""
 
-    print(f"\nLooking up words for answer: '{target_answer}'")
-    print("-" * 40)
+    db_path = r"C:\Users\shute\PycharmProjects\cryptic_solver\data\cryptic_new.db"
+    detector = ComprehensiveWordplayDetector(db_path=db_path)
 
-    answer_words = []
+    print(f"\n{'=' * 80}")
+    print(f"🧪 DIRECT COMBINATION TESTING")
+    print(f"{'=' * 80}")
 
-    with open(csv_path, 'r', encoding='utf-8') as file:
-        reader = csv.DictReader(file)
+    # Test key combinations directly
+    test_cases = [
+        ("UNICORNS", ["cousin"], "cousins vs UNICORNS"),
+        ("UNICORNS", ["cousins"], "cousins vs UNICORNS (alternative)"),
+        ("lambaste", ["at", "sea"], "at + sea vs lambaste"),
+        ("manatees", ["at", "sea"], "at + sea vs manatees"),
+    ]
 
-        for row in reader:
-            if row['answer'].upper() == target_answer.upper():
-                word = row['word']
-                count = int(row['count'])
-                answer_words.append((word, count))
+    for target, fodder_words, description in test_cases:
+        print(f"\n🔬 Testing: {description}")
+        print(f"   Target: {target} ({len(target)} letters)")
+        print(
+            f"   Fodder: {fodder_words} → {''.join(fodder_words)} ({len(''.join(fodder_words))} letters)")
 
-    # Sort by frequency
-    answer_words.sort(key=lambda x: x[1], reverse=True)
+        # Test contribution
+        target_letters = detector.normalize_letters(target)
+        fodder_letters = detector.normalize_letters(' '.join(fodder_words))
 
-    if answer_words:
-        print(f"Found {len(answer_words)} unique words for '{target_answer}':")
-        for i, (word, count) in enumerate(answer_words[:top_n]):
-            print(f"  {i + 1:2d}. '{word:15s}' - {count:3d} times")
-    else:
-        print(f"No data found for answer '{target_answer}'")
+        can_contribute, contribution_ratio, remaining = detector.can_contribute_letters(
+            target_letters, fodder_letters)
 
-    return answer_words
+        print(f"   Can contribute: {can_contribute}")
+        if can_contribute:
+            explained_ratio = (len(target_letters) - len(remaining)) / len(target_letters)
+            print(
+                f"   Explained ratio: {explained_ratio:.2f} ({len(target_letters) - len(remaining)}/{len(target_letters)} letters)")
+            print(f"   Remaining: '{remaining}'")
+
+            # Calculate confidence like the real system
+            confidence = 0.4 + (explained_ratio * 0.4)
+            evidence_score = confidence * len(fodder_words)
+            print(f"   Confidence: {confidence:.2f}")
+            print(f"   Evidence score: {evidence_score:.2f}")
+        else:
+            print(f"   No contribution possible")
+
+
+def check_word_filtering():
+    """Check if 'cousins' is being filtered out somewhere."""
+
+    clue = "Creatures shown by navy netted by cousin at sea (8)"
+
+    print(f"\n{'=' * 80}")
+    print(f"🔍 WORD FILTERING ANALYSIS")
+    print(f"{'=' * 80}")
+
+    # Check raw words
+    words = clue.split()
+    print(f"Raw words: {words}")
+
+    # Check after stop word filtering (like in the real system)
+    stop_words = {'the', 'a', 'an', 'of', 'in', 'to', 'for', 'with', 'by', 'from'}
+    clue_words = [word.strip('.,!?:;()') for word in clue.split()]
+    content_words = [w for w in clue_words if w.lower() not in stop_words and len(w) > 1]
+
+    print(f"After stop word filter: {content_words}")
+    print(f"'cousin' present: {'cousin' in content_words}")
+    print(f"'cousins' present: {'cousins' in content_words}")
+
+    # Check word combinations that would include cousin
+    from itertools import combinations
+
+    print(f"\nSingle word combinations containing 'cousin':")
+    for word in content_words:
+        if 'cousin' in word.lower():
+            print(f"  - {word}")
 
 
 def main():
-    # File path
-    data_dir = Path(r"C:\Users\shute\PycharmProjects\cryptic_solver\data")
-    csv_path = data_dir / "answer_word_frequency.csv"
+    """Run all debugging tests."""
+    print("🐛 DEBUGGING UNICORNS EVIDENCE ISSUE")
+    print("=" * 80)
 
-    print("Analyzing answer_word_frequency.csv")
-    print("=" * 50)
+    # Test 1: Full evidence detection
+    debug_unicorns_clue()
 
-    # Analyze the full file
-    stats = analyze_csv_file(csv_path)
+    # Test 2: Direct combination testing
+    test_direct_combinations()
 
-    if stats:
-        # Look up specific examples
-        test_answers = ['AREA', 'SPEED', 'TIME', 'ANTE', 'ERA']
-        for answer in test_answers:
-            lookup_answer_words(csv_path, answer, top_n=15)
+    # Test 3: Check word filtering
+    check_word_filtering()
+
+    print(f"\n✅ Debugging complete!")
 
 
 if __name__ == "__main__":

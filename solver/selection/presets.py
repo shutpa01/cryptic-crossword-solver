@@ -15,12 +15,12 @@ CRITERIA_ALL = {
     "order": "id",
 }
 
-CRITERIA_DD_ONLY = {
+CRITERIA_ANAGRAM_ONLY = {
     "source": "clues",
     "where": {
-        "wordplay_type": "double_definition",
+        "wordplay_type": "anagram",
     },
-    "limit": 10,   # explicit: no cap
+    "limit": 1000,   # explicit: no cap
     "order": "id",   # deterministic ordering
 }
 

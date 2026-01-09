@@ -32,8 +32,8 @@ from solver.wordplay.lurker.lurker_stage import generate_lurker_hypotheses
 # ==============================
 
 MAX_CLUES = 500
-WORDPLAY_TYPE = "all"              # e.g. "all", "anagram", "lurker", "dd"
-ONLY_MISSING_DEFINITION = True   # show only clues where answer NOT in def candidates
+WORDPLAY_TYPE = "anagram"              # e.g. "all", "anagram", "lurker", "dd"
+ONLY_MISSING_DEFINITION = False   # show only clues where answer NOT in def candidates
 MAX_DISPLAY = 10                   # max number of clues to print
 SINGLE_CLUE_MATCH = ""           # normalised substring
 # match on clue_text (highest priority)
