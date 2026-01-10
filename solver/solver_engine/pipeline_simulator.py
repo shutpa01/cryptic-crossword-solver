@@ -4,8 +4,7 @@
 # - runs clues through ALL stages
 # - preserves evidence
 # - optional wordplay_type filter
-#   * wordplay_type="all" => no filtering
-#   * otherwise case-insensitive match IF column exists
+# - ENHANCED: Now includes forwarded anagram cohort analysis
 
 from __future__ import annotations
 
@@ -26,18 +25,28 @@ from solver.wordplay.double_definition.dd_stage import generate_dd_hypotheses
 from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
 from solver.wordplay.lurker.lurker_stage import generate_lurker_hypotheses
 
+# Evidence System Integration for Analysis
+try:
+    from solver.solver_engine.anagram_evidence_system import ComprehensiveWordplayDetector
+
+    EVIDENCE_SYSTEM_AVAILABLE = True
+except ImportError:
+    EVIDENCE_SYSTEM_AVAILABLE = False
 
 # ==============================
 # SIMULATOR CONFIGURATION
 # ==============================
 
-MAX_CLUES = 500
-WORDPLAY_TYPE = "anagram"              # e.g. "all", "anagram", "lurker", "dd"
-ONLY_MISSING_DEFINITION = False   # show only clues where answer NOT in def candidates
-MAX_DISPLAY = 10                   # max number of clues to print
-SINGLE_CLUE_MATCH = ""           # normalised substring
+MAX_CLUES = 10000
+WORDPLAY_TYPE = "all"  # e.g. "all", "anagram", "lurker", "dd"
+ONLY_MISSING_DEFINITION = False  # show only clues where answer NOT in def candidates
+MAX_DISPLAY = 10  # max number of clues to print
+SINGLE_CLUE_MATCH = ""  # normalised substring
 # match on clue_text (highest priority)
 
+# NEW: Forwarded cohort analysis settings
+ANALYZE_FORWARDED_ANAGRAMS = True  # Enable forwarded anagram analysis
+MAX_FORWARDED_SAMPLES = 25  # Max forwarded samples to show
 
 _ENUM_RE = re.compile(r"\(\d+(?:,\d+)*\)")
 
@@ -45,6 +54,7 @@ _ENUM_RE = re.compile(r"\(\d+(?:,\d+)*\)")
 def _norm_continuous(s: str) -> str:
     """Lowercase, letters only, no spaces."""
     return re.sub(r"[^a-z]", "", s.lower())
+
 
 def _match_single_clue(query: str, clue_text: str) -> bool:
     """
@@ -73,11 +83,65 @@ def _length_filter(cands: List[str], total_len: int) -> List[str]:
     return [c for c in cands if len(norm_letters(c)) == total_len]
 
 
-def run_pipeline_probe(
-    max_clues: int = MAX_CLUES,
-    wordplay_type: str = WORDPLAY_TYPE,
-) -> List[Dict[str, Any]]:
+def _analyze_forwarded_anagram(clue_text: str, answer: str, candidates: List[str],
+                               enumeration: str) -> Dict[str, Any]:
+    """Analyze why an anagram case was forwarded (not solved)."""
 
+    analysis = {
+        "clue": clue_text,
+        "answer": answer,
+        "candidates_sample": candidates[:8],  # Show first 8 for readability
+        "answer_in_candidates": answer in [norm_letters(c) for c in candidates],
+        "indicators_detected": [],
+        "evidence_system_available": EVIDENCE_SYSTEM_AVAILABLE,
+        "evidence_system_result": "not_tested",
+        "failure_reason": "unknown"
+    }
+
+    if not EVIDENCE_SYSTEM_AVAILABLE:
+        analysis["failure_reason"] = "evidence_system_not_available"
+        return analysis
+
+    try:
+        # Test evidence system to see what it found
+        detector = ComprehensiveWordplayDetector()
+
+        # Check indicator detection first
+        indicators = detector.detect_wordplay_indicators(clue_text)
+        analysis["indicators_detected"] = indicators.get('anagram', [])
+
+        if not indicators.get('anagram'):
+            analysis["failure_reason"] = "no_anagram_indicators"
+            analysis["evidence_system_result"] = "skipped_no_indicators"
+            return analysis
+
+        # If indicators found, test evidence system
+        evidence_list = detector.analyze_clue_for_anagram_evidence(
+            clue_text=clue_text,
+            candidates=candidates,
+            enumeration=enumeration,
+            debug=False
+        )
+
+        if evidence_list:
+            analysis["evidence_system_result"] = f"found_{len(evidence_list)}_evidence"
+            analysis[
+                "failure_reason"] = "evidence_found_but_original_missed"  # Shouldn't happen in additive mode
+        else:
+            analysis["evidence_system_result"] = "no_evidence_found"
+            analysis["failure_reason"] = "evidence_system_failed_to_find"
+
+    except Exception as e:
+        analysis["evidence_system_result"] = f"error: {str(e)[:50]}"
+        analysis["failure_reason"] = "evidence_system_error"
+
+    return analysis
+
+
+def run_pipeline_probe(
+        max_clues: int = MAX_CLUES,
+        wordplay_type: str = WORDPLAY_TYPE,
+) -> List[Dict[str, Any]]:
     wp_filter = wordplay_type.lower()
 
     conn = connect_db()
@@ -124,12 +188,20 @@ def run_pipeline_probe(
 
     results: List[Dict[str, Any]] = []
 
+    # NEW: Forwarded anagram cases collection
+    forwarded_anagram_cases = []
+
     overall = {
         "clues": 0,
         "clues_with_def_match": 0,
         "clues_with_anagram": 0,
         "clues_with_lurker": 0,
         "clues_with_dd": 0,
+        # NEW: Forwarded analysis stats
+        "forwarded_anagrams": 0,
+        "forwarded_no_indicators": 0,
+        "forwarded_evidence_failed": 0,
+        "forwarded_system_error": 0,
     }
 
     for clue, enum, answer_raw, wp_type in rows:
@@ -207,6 +279,23 @@ def run_pipeline_probe(
             candidates=flat_candidates,
         )
 
+        # NEW: Forwarded anagram analysis
+        if not anag_hits and ANALYZE_FORWARDED_ANAGRAMS and len(
+                forwarded_anagram_cases) < MAX_FORWARDED_SAMPLES:
+            # This is a forwarded anagram case - analyze why
+            analysis = _analyze_forwarded_anagram(clue, answer_raw, flat_candidates, enum)
+            forwarded_anagram_cases.append(analysis)
+
+            # Update forwarded stats
+            overall["forwarded_anagrams"] += 1
+            if analysis["failure_reason"] == "no_anagram_indicators":
+                overall["forwarded_no_indicators"] += 1
+            elif analysis["failure_reason"] == "evidence_system_failed_to_find":
+                overall["forwarded_evidence_failed"] += 1
+            elif analysis["failure_reason"] in ["evidence_system_error",
+                                                "evidence_system_not_available"]:
+                overall["forwarded_system_error"] += 1
+
         # ---- Lurkers ----
         lurk_hits = generate_lurker_hypotheses(
             clue_text=clue,
@@ -215,7 +304,7 @@ def run_pipeline_probe(
         )
 
         definition_answer_present = (
-            answer in {norm_letters(c) for c in flat_candidates}
+                answer in {norm_letters(c) for c in flat_candidates}
         )
 
         # ---- HIT CLASSIFICATION (REPORTING ONLY) ----
@@ -269,6 +358,10 @@ def run_pipeline_probe(
         results.append(record)
 
     conn.close()
+
+    # Add forwarded analysis to overall stats
+    overall["forwarded_anagram_cases"] = forwarded_anagram_cases
+
     return results, overall
 
 
@@ -286,6 +379,30 @@ if __name__ == "__main__":
     print(f"  clues w/ anagram hit      : {overall['clues_with_anagram']}")
     print(f"  clues w/ lurker hit       : {overall['clues_with_lurker']}")
     print(f"  clues w/ DD hit           : {overall['clues_with_dd']}")
+
+    # NEW: Forwarded anagram analysis section
+    if ANALYZE_FORWARDED_ANAGRAMS and overall.get("forwarded_anagram_cases"):
+        print(f"\n=== FORWARDED ANAGRAM COHORT ANALYSIS ===")
+        print(f"  total forwarded           : {overall['forwarded_anagrams']}")
+        print(f"  no indicators detected    : {overall['forwarded_no_indicators']}")
+        print(f"  evidence system failed    : {overall['forwarded_evidence_failed']}")
+        print(f"  system errors             : {overall['forwarded_system_error']}")
+        print(
+            f"\nSample forwarded cases (showing first {len(overall['forwarded_anagram_cases'])}):")
+        print("-" * 80)
+
+        for i, case in enumerate(overall["forwarded_anagram_cases"], 1):
+            print(f"[{i}] CLUE: {case['clue']}")
+            print(f"    ANSWER: {case['answer']}")
+            print(
+                f"    CANDIDATES: {', '.join(case['candidates_sample'])}{'...' if len(case['candidates_sample']) == 8 else ''}")
+            print(f"    ANSWER IN CANDIDATES: {case['answer_in_candidates']}")
+            print(
+                f"    INDICATORS DETECTED: {', '.join(case['indicators_detected']) if case['indicators_detected'] else 'none'}")
+            print(f"    EVIDENCE SYSTEM: {case['evidence_system_result']}")
+            print(f"    FAILURE REASON: {case['failure_reason']}")
+            print("-" * 80)
+
     print()
     for i, r in enumerate(data[:MAX_DISPLAY], 1):
         print(f"[{i}] CLUE: {r['clue']}")
@@ -318,8 +435,8 @@ if __name__ == "__main__":
 
         print("    ALL WINDOWS → CANDIDATES:")
         for w, cands in sorted(
-            r["window_candidates_by_window"].items(),
-            key=lambda x: (len(x[0].split()), x[0].lower())
+                r["window_candidates_by_window"].items(),
+                key=lambda x: (len(x[0].split()), x[0].lower())
         ):
             if cands:
                 print(f"      {w} → {', '.join(cands)}")

@@ -36,6 +36,9 @@ class StageStats:
     solved: int = 0
     forwarded: int = 0
     weak: int = 0
+    # Anagram evidence breakdowns (calculated automatically from hypotheses)
+    anagram_exact: int = 0
+    anagram_evidence: int = 0
     examples: List[StageExample] = field(default_factory=list)
 
 
@@ -44,6 +47,7 @@ class CascadeAnalyser:
     Population-level stats container.
     - record_simple(...) is the primary interface for master_solver.
     - record_context(...) is optional and kept for later bespoke debug tooling.
+    - Automatically calculates anagram breakdowns from hypotheses.
     """
 
     def __init__(self, max_examples_per_bucket: int = 5):
@@ -65,18 +69,28 @@ class CascadeAnalyser:
         return f"{(100.0 * part / whole):.2f}%"
 
     def record_simple(
-        self,
-        stage_name: str,
-        entered: int,
-        solved: int,
-        forwarded: Optional[int] = None,
-        weak: int = 0,
-        examples: Optional[List[StageExample]] = None,
+            self,
+            stage_name: str,
+            entered: int,
+            solved: int,
+            forwarded: Optional[int] = None,
+            weak: int = 0,
+            examples: Optional[List[StageExample]] = None,
+            hypotheses: Optional[List[Dict]] = None,  # NEW: Accept hypotheses for auto-calculation
     ) -> None:
         s = self._ensure(stage_name)
         s.entered += int(entered)
         s.solved += int(solved)
         s.weak += int(weak)
+
+        # AUTO-CALCULATE anagram breakdown from hypotheses (clean architecture)
+        if stage_name == "Anagrams" and hypotheses:
+            anagram_exact = sum(1 for h in hypotheses if h.get("solve_type") == "anagram_exact")
+            anagram_evidence = sum(1 for h in hypotheses
+                                 if h.get("solve_type", "").startswith("anagram_evidence"))
+            s.anagram_exact += anagram_exact
+            s.anagram_evidence += anagram_evidence
+
         if forwarded is None:
             # Default: everything not solved is forwarded.
             forwarded = max(0, int(entered) - int(solved))
@@ -104,10 +118,17 @@ class CascadeAnalyser:
 
         for name in self.stage_order:
             s = self.stats[name]
+
+            # Enhanced reporting for anagram stages (when evidence data available)
+            if name == "Anagrams" and (s.anagram_exact > 0 or s.anagram_evidence > 0):
+                breakdown = f" ({s.anagram_exact} exact + {s.anagram_evidence} evidence)"
+            else:
+                breakdown = ""
+
             print(
                 f"{name}: "
                 f"entered={s.entered} "
-                f"solved={s.solved} ({self._pct(s.solved, s.entered)}) "
+                f"solved={s.solved}{breakdown} ({self._pct(s.solved, s.entered)}) "
                 f"forwarded={s.forwarded} ({self._pct(s.forwarded, s.entered)})"
             )
 

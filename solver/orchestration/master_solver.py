@@ -56,6 +56,7 @@ def main():
 
     anagram_entered = 0
     anagram_solved = 0
+    all_anagram_hits = []  # NEW: Collect hypotheses for cascade analyser breakdown
 
     lurker_entered = 0
     lurker_solved = 0
@@ -105,7 +106,7 @@ def main():
         flat_candidates = _length_filter(raw_candidates, total_len)
 
         # Gate check uses normalised strings for safety.
-        # DB answer is NEVER used for solving—only for this diagnostic filter.
+        # DB answer is NEVER used for solvingâ€"only for this diagnostic filter.
         candidate_norm = {norm_letters(c) for c in flat_candidates}
         if db_answer not in candidate_norm:
             gate_failed += 1
@@ -123,6 +124,7 @@ def main():
         )
         if anagram_hits:
             anagram_solved += 1
+            all_anagram_hits.extend(anagram_hits)  # NEW: Collect hypotheses for breakdown
             continue
 
         carried_after_anagram += 1
@@ -157,11 +159,13 @@ def main():
         forwarded=carried_after_gate,
     )
 
+    # FIX: Pass hypotheses to cascade analyser for automatic breakdown calculation
     analyser.record_simple(
         stage_name="Anagrams",
         entered=anagram_entered,
         solved=anagram_solved,
         forwarded=carried_after_anagram,
+        hypotheses=all_anagram_hits,  # NEW: Let cascade analyser calculate breakdown
     )
 
     analyser.record_simple(

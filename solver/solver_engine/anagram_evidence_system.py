@@ -273,20 +273,7 @@ class ComprehensiveWordplayDetector:
                                      candidates: List[str]) -> list:
         """
         Progressive expansion from indicator positions to find anagram fodder.
-
-        Algorithm:
-        1. Find indicator positions
-        2. Move progressively left and right from each indicator
-        3. Test contribution FIRST, then treat as link word only if doesn't contribute
-        4. Continue expanding through structural link words
-
-        Args:
-            clue_text: The clue text
-            indicators: Dictionary of detected indicators
-            candidates: List of candidates to test fodder against
-
-        Returns:
-            List of words that can contribute as anagram fodder
+        FIXED: Test contribution FIRST, then treat as link word only if doesn't contribute.
         """
         anagram_indicators = indicators.get('anagram', [])
         if not anagram_indicators:
@@ -303,10 +290,9 @@ class ComprehensiveWordplayDetector:
         if not indicator_positions:
             return []
 
-        # Common link words that connect indicators to fodder
-        link_words = {'in', 'with', 'of', 'needs','to', 'for', 'by', 'from', 'about',
-                      'on',
-                      'after', 'and'}
+        # FIXED: Common link words that connect indicators to fodder (added 'needs')
+        link_words = {'in', 'with', 'of', 'needs', 'to', 'for', 'by', 'from', 'about',
+                      'on', 'after', 'and'}
 
         # Collect fodder words from all indicators
         all_fodder_positions = set()
@@ -318,7 +304,7 @@ class ComprehensiveWordplayDetector:
                 word = clue_words[pos]
                 word_lower = word.lower()
 
-                # Test if this word can contribute to any candidate FIRST
+                # FIXED: Test if this word can contribute to any candidate FIRST
                 if self._can_word_contribute_to_candidates(word, candidates):
                     all_fodder_positions.add(pos)
                     pos -= 1  # Continue expanding left
@@ -335,7 +321,7 @@ class ComprehensiveWordplayDetector:
                 word = clue_words[pos]
                 word_lower = word.lower()
 
-                # Test if this word can contribute to any candidate FIRST
+                # FIXED: Test if this word can contribute to any candidate FIRST
                 if self._can_word_contribute_to_candidates(word, candidates):
                     all_fodder_positions.add(pos)
                     pos += 1  # Continue expanding right
@@ -358,14 +344,8 @@ class ComprehensiveWordplayDetector:
     def _can_word_contribute_to_candidates(self, word: str,
                                            candidates: List[str]) -> bool:
         """
-        Check if a word can contribute letters to any of the candidates.
-
-        Args:
-            word: The word to test
-            candidates: List of candidate answers
-
-        Returns:
-            True if word can contribute to at least one candidate
+        FIXED: Check if a word can contribute letters to any of the candidates.
+        CRITICAL FIX: Parameter order corrected.
         """
         word_normalized = self.normalize_letters(word)
         if not word_normalized:
@@ -373,8 +353,9 @@ class ComprehensiveWordplayDetector:
 
         for candidate in candidates:
             candidate_normalized = self.normalize_letters(candidate)
-            can_contribute, _, _ = self.can_contribute_letters(word_normalized,
-                                                               candidate_normalized)
+            # FIXED: Correct parameter order - can source (word) contribute to target (candidate)
+            can_contribute, _, _ = self.can_contribute_letters(candidate_normalized,
+                                                               word_normalized)
             if can_contribute:
                 return True
 
@@ -678,67 +659,3 @@ class ComprehensiveWordplayDetector:
                 boost += explained_ratio * 5.0  # Up to 5 extra points
 
         return boost + word_count_bonus
-
-
-def demo_comprehensive_wordplay_detection():
-    """Demonstrate comprehensive wordplay evidence detection including all indicator types."""
-    # Use the database path - adjust this to your actual database location
-    db_path = r"C:\Users\shute\PycharmProjects\cryptic_solver\data\cryptic_new.db"
-    detector = ComprehensiveWordplayDetector(db_path=db_path)
-
-    test_cases = [
-        # (clue, [candidates...])
-        ("Confused traces in garden (6)", ["CASTER", "TRACER", "CRATER"]),
-        ("Mixed dollop lost letters makes runner (4)", ["PLOD", "LOOP", "POLO"]),
-        ("Established scout corrupted virgin (9)",
-         ["CUSTOMARY", "CONFIRMED", "ANCESTRAL"]),
-        ("Same sad converts got together (7)", ["AMASSED", "EN MASSE", "UNIFORM"]),
-        ("Comic teases the arty types (9)", ["AESTHETES", "BOHEMIANS", "BURLESQUE"]),
-        ("Ornament of exceptional age incorporating representation of glory (8)",
-         ["GARGOYLE", "BRACELET", "FIGURINE"]),
-        ("Shopkeeper's beard has disturbed that woman (11)",
-         ["HABERDASHER", "STOREKEEPER", "SHOPKEEPER"]),
-    ]
-
-    for clue, candidates in test_cases:
-        print(f"\n{'=' * 80}")
-        print(f"CLUE: {clue}")
-        print(f"CANDIDATES: {', '.join(candidates)}")
-        print(f"{'=' * 80}")
-
-        # Show comprehensive indicator detection
-        indicators = detector.detect_wordplay_indicators(clue)
-        print(f"DETECTED INDICATORS:")
-        for wordplay_type, found_indicators in indicators.items():
-            if found_indicators:
-                print(f"  {wordplay_type.upper()}: {', '.join(found_indicators)}")
-
-        # Show anagram evidence (keeping focus on current implementation)
-        evidence_list = detector.analyze_clue_for_anagram_evidence(clue, candidates)
-
-        if evidence_list:
-            for evidence in evidence_list:
-                print(f"\n★ ANAGRAM EVIDENCE FOUND:")
-                print(f"  Candidate: {evidence.candidate}")
-                print(f"  Type: {evidence.evidence_type}")
-                print(f"  Fodder: {' + '.join(evidence.fodder_words)}")
-                print(f"  Confidence: {evidence.confidence:.2f}")
-
-                if evidence.evidence_type == "partial":
-                    print(f"  Remaining letters needed: {evidence.needed_letters}")
-                elif evidence.excess_letters:
-                    print(f"  Excess letters: {evidence.excess_letters}")
-                elif evidence.needed_letters:
-                    print(f"  Needed letters: {evidence.needed_letters}")
-
-                if evidence.unused_clue_words:
-                    print(f"  Unused clue words: {', '.join(evidence.unused_clue_words)}")
-
-                boost = detector.calculate_anagram_score_boost(evidence)
-                print(f"  Score boost: +{boost:.1f}")
-        else:
-            print("No anagram evidence found.")
-
-
-if __name__ == "__main__":
-    demo_comprehensive_wordplay_detection()

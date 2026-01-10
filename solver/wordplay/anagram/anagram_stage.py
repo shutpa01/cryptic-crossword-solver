@@ -3,9 +3,59 @@ from collections import Counter
 
 from solver.solver_engine.resources import norm_letters
 
+# Evidence system integration (safe import with fallback)
+try:
+    from solver.solver_engine.anagram_evidence_system import ComprehensiveWordplayDetector
+
+    _evidence_detector = None
+
+
+    def _get_evidence_detector():
+        global _evidence_detector
+        if _evidence_detector is None:
+            _evidence_detector = ComprehensiveWordplayDetector()
+        return _evidence_detector
+
+
+    EVIDENCE_SYSTEM_AVAILABLE = True
+except ImportError:
+    EVIDENCE_SYSTEM_AVAILABLE = False
+
 
 def generate_anagram_hypotheses(clue_text, enumeration, candidates):
     """
+    Enhanced anagram hypothesis generation:
+    1. Run original logic first (preserves all existing hits)
+    2. For unresolved cases, try evidence system
+    3. Return combined results
+    """
+
+    # STEP 1: Run original logic (exactly as before)
+    original_hypotheses = _generate_anagram_hypotheses_original(clue_text, enumeration,
+                                                                candidates)
+
+    # STEP 2: If original found hits, return them (preserves existing behavior)
+    if original_hypotheses:
+        return original_hypotheses
+
+    # STEP 3: If no original hits AND evidence system available, try evidence system
+    if EVIDENCE_SYSTEM_AVAILABLE:
+        try:
+            evidence_hypotheses = _generate_anagram_hypotheses_evidence(clue_text,
+                                                                        enumeration,
+                                                                        candidates)
+            return evidence_hypotheses
+        except Exception:
+            # Silent fallback - don't break existing functionality
+            pass
+
+    # STEP 4: Return empty if nothing found (same as original behavior)
+    return []
+
+
+def _generate_anagram_hypotheses_original(clue_text, enumeration, candidates):
+    """
+    Original anagram detection logic (preserved exactly).
     Stage A: Free anagram hypothesis generation (provisional).
     Includes Stage-B hygiene: reject trivial self-anagrams.
     """
@@ -64,8 +114,71 @@ def generate_anagram_hypotheses(clue_text, enumeration, candidates):
                     "fodder_letters": "".join(sorted(combined.elements())),
                     "unused_words": unused_words,
                     "candidate_source": candidate,
-                    "solve_type": "anagram_provisional",
+                    "solve_type": "anagram_exact",
+                    # Enhanced: specific type for reporting
                     "confidence": "provisional",
                 })
+
+    return hypotheses
+
+
+def _generate_anagram_hypotheses_evidence(clue_text, enumeration, candidates):
+    """
+    Evidence system anagram detection for unresolved cases.
+    Converts evidence system output to standard hypothesis format.
+    """
+
+    detector = _get_evidence_detector()
+
+    # Filter candidates to correct length (matching original behavior)
+    filtered_candidates = []
+    for cand in candidates:
+        norm = norm_letters(cand)
+        if len(norm) == enumeration:
+            filtered_candidates.append(cand)
+
+    if not filtered_candidates:
+        return []
+
+    # Use evidence system to find anagram evidence
+    evidence_list = detector.analyze_clue_for_anagram_evidence(
+        clue_text=clue_text,
+        candidates=filtered_candidates,
+        enumeration=f"({enumeration})",  # Convert to enumeration format
+        debug=False
+    )
+
+    # Convert evidence objects to hypothesis format (matching original interface)
+    hypotheses = []
+
+    for evidence in evidence_list:
+        # Calculate unused words (words not in fodder)
+        clue_words = [w for w in clue_text.split() if w.isalpha()]
+        unused_words = [w for w in clue_words if w not in evidence.fodder_words]
+
+        # Map evidence types to solve types for reporting
+        solve_type_map = {
+            "exact": "anagram_evidence_exact",
+            "partial": "anagram_evidence_partial",
+            "deletion": "anagram_evidence_deletion",
+            "insertion": "anagram_evidence_insertion"
+        }
+
+        hypothesis = {
+            "answer": evidence.candidate,
+            "fodder_words": evidence.fodder_words,
+            "fodder_letters": evidence.fodder_letters,
+            "unused_words": unused_words,
+            "candidate_source": evidence.candidate,
+            "solve_type": solve_type_map.get(evidence.evidence_type, "anagram_evidence"),
+            "confidence": evidence.confidence,
+            # Additional fields for enhanced functionality (preserve evidence system data)
+            "evidence_type": evidence.evidence_type,
+            "score_boost": detector.calculate_anagram_score_boost(evidence),
+            "needed_letters": getattr(evidence, 'needed_letters', ''),
+            "excess_letters": getattr(evidence, 'excess_letters', '')
+        }
+
+        hypotheses.append(hypothesis)
 
     return hypotheses
