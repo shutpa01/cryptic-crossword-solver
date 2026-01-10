@@ -27,7 +27,7 @@ from solver.wordplay.lurker.lurker_stage import generate_lurker_hypotheses
 
 # Evidence System Integration for Analysis
 try:
-    from solver.solver_engine.anagram_evidence_system import ComprehensiveWordplayDetector
+    from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
 
     EVIDENCE_SYSTEM_AVAILABLE = True
 except ImportError:

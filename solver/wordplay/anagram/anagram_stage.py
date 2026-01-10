@@ -5,7 +5,7 @@ from solver.solver_engine.resources import norm_letters
 
 # Evidence system integration (safe import with fallback)
 try:
-    from solver.solver_engine.anagram_evidence_system import ComprehensiveWordplayDetector
+    from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
 
     _evidence_detector = None
 
