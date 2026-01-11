@@ -18,8 +18,7 @@ import os
 
 # Import the original pipeline simulator (maintaining sanctity)
 from pipeline_simulator import run_pipeline_probe, MAX_CLUES, WORDPLAY_TYPE
-from anagram_evidence_system import ComprehensiveWordplayDetector
-
+from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
 # Evidence scoring configuration
 ENABLE_EVIDENCE_SCORING = True
 EVIDENCE_SCORE_WEIGHT = 1.0

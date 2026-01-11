@@ -27,7 +27,8 @@ from solver.wordplay.lurker.lurker_stage import generate_lurker_hypotheses
 
 # Evidence System Integration for Analysis
 try:
-    from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
+    from solver.wordplay.anagram.anagram_evidence_system import \
+        ComprehensiveWordplayDetector
 
     EVIDENCE_SYSTEM_AVAILABLE = True
 except ImportError:
@@ -45,8 +46,12 @@ SINGLE_CLUE_MATCH = ""  # normalised substring
 # match on clue_text (highest priority)
 
 # NEW: Forwarded cohort analysis settings
-ANALYZE_FORWARDED_ANAGRAMS = True  # Enable forwarded anagram analysis
+ANALYZE_FORWARDED_ANAGRAMS = False  # Disable for explanation system development - focus on successes
 MAX_FORWARDED_SAMPLES = 25  # Max forwarded samples to show
+
+# NEW: Successful anagram analysis for explanation system development
+ANALYZE_SUCCESSFUL_ANAGRAMS = True  # Enable successful anagram analysis
+MAX_SUCCESSFUL_SAMPLES = 25  # Max successful samples to show
 
 _ENUM_RE = re.compile(r"\(\d+(?:,\d+)*\)")
 
@@ -138,6 +143,77 @@ def _analyze_forwarded_anagram(clue_text: str, answer: str, candidates: List[str
     return analysis
 
 
+def _analyze_successful_anagram(clue_text: str, answer: str, candidates: List[str],
+                                anagram_hits: List[Dict],
+                                window_support: Dict[str, List[str]],
+                                enumeration: str) -> Dict[str, Any]:
+    """Analyze successful anagram case for explanation system development."""
+
+    # Take the first (best) anagram hit
+    best_hit = anagram_hits[0] if anagram_hits else {}
+
+    # Find which definition window provided the answer
+    definition_window = None
+    normalized_answer = norm_letters(answer)
+    for window, window_candidates in window_support.items():
+        normalized_candidates = [norm_letters(c) for c in window_candidates]
+        if normalized_answer in normalized_candidates:
+            definition_window = window
+            break
+
+    analysis = {
+        "clue": clue_text,
+        "answer": answer,
+        "definition_window": definition_window,
+        "anagram_evidence": {
+            "candidate": best_hit.get("answer", ""),
+            "fodder_words": best_hit.get("fodder_words", []),
+            "fodder_letters": best_hit.get("fodder_letters", ""),
+            "evidence_type": best_hit.get("evidence_type", "unknown"),
+            "solve_type": best_hit.get("solve_type", "unknown"),
+            "confidence": best_hit.get("confidence", 0.0),
+            "needed_letters": best_hit.get("needed_letters", ""),
+            "excess_letters": best_hit.get("excess_letters", "")
+        },
+        "enumeration": enumeration,
+        "candidates_sample": candidates[:8]
+    }
+
+    # Calculate remaining words (for explanation system development)
+    clue_words = clue_text.split()
+    accounted_words = set()
+
+    # Add definition window words (if found)
+    if definition_window:
+        accounted_words.update(definition_window.split())
+
+    # Add anagram fodder words
+    if best_hit.get("fodder_words"):
+        accounted_words.update(best_hit["fodder_words"])
+
+    # Add common anagram indicators (basic set - could be expanded)
+    anagram_indicators = {"confused", "mixed", "jumbled", "corrupted", "converts",
+                          "exceptional", "comic", "arranged", "changed", "reformed",
+                          "twisted", "mangled", "disturbed", "wrong", "badly", "odd"}
+
+    for word in clue_words:
+        clean_word = word.strip('.,!?:;()').lower()
+        if clean_word in anagram_indicators:
+            accounted_words.add(clean_word)
+
+    # Calculate remaining words
+    remaining_words = []
+    for word in clue_words:
+        clean_word = word.strip('.,!?:;()')
+        if clean_word.lower() not in [w.lower() for w in accounted_words]:
+            remaining_words.append(clean_word)
+
+    analysis["remaining_words"] = remaining_words
+    analysis["accounted_words"] = list(accounted_words)
+
+    return analysis
+
+
 def run_pipeline_probe(
         max_clues: int = MAX_CLUES,
         wordplay_type: str = WORDPLAY_TYPE,
@@ -191,6 +267,9 @@ def run_pipeline_probe(
     # NEW: Forwarded anagram cases collection
     forwarded_anagram_cases = []
 
+    # NEW: Successful anagram cases collection
+    successful_anagram_cases = []
+
     overall = {
         "clues": 0,
         "clues_with_def_match": 0,
@@ -202,6 +281,11 @@ def run_pipeline_probe(
         "forwarded_no_indicators": 0,
         "forwarded_evidence_failed": 0,
         "forwarded_system_error": 0,
+        # NEW: Successful analysis stats
+        "successful_anagrams": 0,
+        "successful_exact": 0,
+        "successful_partial": 0,
+        "successful_deletion": 0,
     }
 
     for clue, enum, answer_raw, wp_type in rows:
@@ -296,6 +380,29 @@ def run_pipeline_probe(
                                                 "evidence_system_not_available"]:
                 overall["forwarded_system_error"] += 1
 
+        # NEW: Successful anagram analysis for explanation system development
+        if anag_hits and ANALYZE_SUCCESSFUL_ANAGRAMS and len(
+                successful_anagram_cases) < MAX_SUCCESSFUL_SAMPLES:
+            # This is a successful anagram case - analyze for explanation system
+            analysis = _analyze_successful_anagram(
+                clue_text=clue,
+                answer=answer_raw,
+                candidates=flat_candidates,
+                anagram_hits=anag_hits,
+                window_support=windows_with_hits,
+                enumeration=enum
+            )
+            successful_anagram_cases.append(analysis)
+
+            # Update successful stats
+            overall["successful_anagrams"] += 1
+            if analysis["anagram_evidence"]["evidence_type"] == "exact":
+                overall["successful_exact"] += 1
+            elif analysis["anagram_evidence"]["evidence_type"] == "partial":
+                overall["successful_partial"] += 1
+            elif analysis["anagram_evidence"]["evidence_type"] == "deletion":
+                overall["successful_deletion"] += 1
+
         # ---- Lurkers ----
         lurk_hits = generate_lurker_hypotheses(
             clue_text=clue,
@@ -362,6 +469,9 @@ def run_pipeline_probe(
     # Add forwarded analysis to overall stats
     overall["forwarded_anagram_cases"] = forwarded_anagram_cases
 
+    # Add successful analysis to overall stats
+    overall["successful_anagram_cases"] = successful_anagram_cases
+
     return results, overall
 
 
@@ -401,6 +511,38 @@ if __name__ == "__main__":
                 f"    INDICATORS DETECTED: {', '.join(case['indicators_detected']) if case['indicators_detected'] else 'none'}")
             print(f"    EVIDENCE SYSTEM: {case['evidence_system_result']}")
             print(f"    FAILURE REASON: {case['failure_reason']}")
+            print("-" * 80)
+
+    # NEW: Successful anagram analysis section
+    if ANALYZE_SUCCESSFUL_ANAGRAMS and overall.get("successful_anagram_cases"):
+        print(f"\n=== SUCCESSFUL ANAGRAM COHORT ANALYSIS ===")
+        print(f"  total successful          : {overall['successful_anagrams']}")
+        print(f"  exact matches             : {overall['successful_exact']}")
+        print(f"  partial matches           : {overall['successful_partial']}")
+        print(f"  deletion matches          : {overall['successful_deletion']}")
+        print(
+            f"\nSample successful cases (showing first {len(overall['successful_anagram_cases'])}):")
+        print("-" * 80)
+
+        for i, case in enumerate(overall["successful_anagram_cases"], 1):
+            print(f"[{i}] CLUE: {case['clue']}")
+            print(f"    ANSWER: {case['answer']}")
+            print(f"    DEFINITION: {case['definition_window']}")
+            print(f"    ANAGRAM EVIDENCE:")
+            print(f"      Type: {case['anagram_evidence']['evidence_type']}")
+            print(f"      Solve Type: {case['anagram_evidence']['solve_type']}")
+            print(f"      Fodder: {' + '.join(case['anagram_evidence']['fodder_words'])}")
+            print(
+                f"      Confidence: {case['anagram_evidence']['confidence'] if isinstance(case['anagram_evidence']['confidence'], (int, float)) else 'N/A'}")
+            if case['anagram_evidence']['needed_letters']:
+                print(
+                    f"      Needed letters: {case['anagram_evidence']['needed_letters']}")
+            if case['anagram_evidence']['excess_letters']:
+                print(
+                    f"      Excess letters: {case['anagram_evidence']['excess_letters']}")
+            print(
+                f"    REMAINING WORDS: {', '.join([w for w in case['remaining_words'] if not w.isdigit()]) if case['remaining_words'] else 'none'}")
+            print(f"    ACCOUNTED FOR: {', '.join(case['accounted_words'])}")
             print("-" * 80)
 
     print()
