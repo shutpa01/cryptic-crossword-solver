@@ -1,361 +1,305 @@
 #!/usr/bin/env python3
 """
-Compound Wordplay Analysis
-Analyzes cohorts from pipeline_simulator for compound wordplay patterns.
-Takes cases with partial anagram matches + remaining words and tests for additional wordplay.
-
-Based on evidence_analysis.py pattern for debugging compound wordplay development.
+Explanation System Builder
+Builds systematic explanations for compound cryptic constructions using enhanced pipeline data.
 """
 
-import sqlite3
-import re
-from collections import defaultdict, Counter
-from typing import List, Dict, Any, Set, Tuple, Optional
+import sys
+import os
+import json
+from typing import List, Dict, Any, Optional
 
-from solver.solver_engine.resources import connect_db, norm_letters
+# Add project root to path
+sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
+
+from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
+from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
 
 
-class CompoundWordplayAnalyzer:
-    """
-    Analyzes remaining words from anagram cases for compound wordplay patterns.
-    Uses substitution rules and indicators to find multi-stage solutions.
-    """
+class ExplanationSystemBuilder:
+    """Builds systematic explanations for cryptic constructions."""
 
     def __init__(self):
-        self.substitution_rules = {}
-        self.wordplay_indicators = defaultdict(list)
-        self.stats = {
-            'total_cases': 0,
-            'substitution_hits': 0,
-            'multi_wordplay_hits': 0,
-            'compound_solutions': 0,
-            'confidence_scores': []
+        """Initialize with evidence system detector for read-only operations."""
+        self.detector = ComprehensiveWordplayDetector()
+
+    def extract_definition_window(self, case: Dict[str, Any]) -> Optional[str]:
+        """Extract definition window from pipeline case data."""
+        answer = case.get('answer', '').upper()
+        window_support = case.get('window_support', {})
+
+        # Find window that contains the correct answer
+        for window, candidates in window_support.items():
+            normalized_candidates = [c.upper().replace(' ', '') for c in candidates]
+            normalized_answer = answer.replace(' ', '')
+
+            if normalized_answer in normalized_candidates:
+                return window
+
+        return None
+
+    def detect_indicators_readonly(self, clue_text: str) -> Dict[str, List[str]]:
+        """Read-only call to evidence system for indicator detection."""
+        try:
+            return self.detector.detect_wordplay_indicators(clue_text)
+        except Exception as e:
+            print(f"Warning: Could not detect indicators for '{clue_text}': {e}")
+            return {'anagram': []}
+
+    def extract_anagram_data(self, case: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract anagram evidence data using the same working approach as evidence_analysis.py."""
+        clue_text = case.get('clue', '')
+        answer = case.get('answer', '')
+
+        # Get definition candidates - we need this for generate_anagram_hypotheses
+        # For compound analysis, we can use a simple list with just the answer
+        candidates = [answer] if answer else []
+
+        if not candidates:
+            return {}
+
+        # Use the SAME approach as evidence_analysis.py (which works perfectly)
+        enumeration_num = len(answer.replace(' ', '')) if answer else 0
+
+        # Call the working anagram function that evidence_analysis.py uses
+        hypotheses = generate_anagram_hypotheses(clue_text, enumeration_num, candidates)
+
+        if not hypotheses:
+            return {}
+
+        # Take the best (first) hypothesis - same as evidence_analysis.py approach
+        best_hypothesis = hypotheses[0]
+
+        # Convert hypothesis to the format expected by the rest of the system
+        return {
+            'candidate': best_hypothesis.get('answer', ''),
+            'fodder_words': best_hypothesis.get('fodder_words', []),
+            'fodder_letters': best_hypothesis.get('fodder_letters', ''),
+            'confidence': best_hypothesis.get('confidence', 0.5),
+            'evidence_type': best_hypothesis.get('evidence_type',
+                                                 best_hypothesis.get('solve_type',
+                                                                     'exact')),
+            'needed_letters': best_hypothesis.get('needed_letters', ''),
+            'excess_letters': best_hypothesis.get('excess_letters', '')
         }
-        self._load_resources()
 
-    def _load_resources(self):
-        """Load substitution rules and wordplay indicators from database"""
-        conn = connect_db()
+    def build_word_attribution(self, case: Dict[str, Any]) -> Dict[str, Any]:
+        """Build complete word attribution from case data."""
+        clue_text = case.get('clue', '')
+        clue_words = clue_text.split()
 
-        # Load substitution rules from wordplay table
-        cursor = conn.execute("""
-            SELECT indicator, substitution, category, confidence 
-            FROM wordplay 
-            WHERE substitution IS NOT NULL AND substitution != ''
-            ORDER BY confidence DESC
-        """)
+        # Extract core components
+        definition_window = self.extract_definition_window(case)
+        indicators = self.detect_indicators_readonly(clue_text)
+        anagram_data = self.extract_anagram_data(case)
 
-        for row in cursor:
-            indicator = row[0].lower().strip()
-            substitution = row[1].strip()
-            category = row[2] or 'unknown'
-            confidence = row[3] or 'medium'
+        # Build accounted words set
+        accounted_words = set()
 
-            self.substitution_rules[indicator] = {
-                'substitution': substitution,
-                'category': category,
-                'confidence': confidence
+        # Add definition window words
+        if definition_window:
+            # Clean and add definition words
+            def_words = [w.strip('.,!?:;()') for w in definition_window.split()]
+            accounted_words.update(def_words)
+
+        # Add anagram fodder words
+        fodder_words = anagram_data.get('fodder_words', [])
+        accounted_words.update(fodder_words)
+
+        # Add anagram indicators
+        anagram_indicators = indicators.get('anagram', [])
+        accounted_words.update(anagram_indicators)
+
+        # Add common link words that might connect components
+        link_words = {'in', 'with', 'of', 'to', 'for', 'by', 'from', 'and', 'but', 'the',
+                      'a'}
+        for word in clue_words:
+            clean_word = word.strip('.,!?:;()').lower()
+            if clean_word in link_words:
+                accounted_words.add(clean_word)
+
+        # Calculate remaining words
+        remaining_words = []
+        for word in clue_words:
+            clean_word = word.strip('.,!?:;()')
+            if clean_word.lower() not in [w.lower() for w in accounted_words]:
+                # Skip enumeration patterns like (6,3)
+                if not (clean_word.startswith('(') and clean_word.endswith(')')):
+                    remaining_words.append(clean_word)
+
+        return {
+            'clue': clue_text,
+            'answer': case.get('answer_raw', ''),
+            'definition_window': definition_window,
+            'anagram_indicators': anagram_indicators,
+            'anagram_data': anagram_data,
+            'accounted_words': list(accounted_words),
+            'remaining_words': remaining_words,
+            'enumeration': case.get('enumeration', ''),
+            # Preserve original case data
+            'original_case': case
+        }
+
+    def enhance_pipeline_data(self, raw_pipeline_results: List[Dict[str, Any]]) -> List[
+        Dict[str, Any]]:
+        """
+        Extract complete word attribution from pipeline simulator results.
+        Adds definition windows, indicators, and proper remaining words calculation.
+        """
+        enhanced_cases = []
+
+        print("Enhancing pipeline data with complete word attribution...")
+
+        for i, case in enumerate(raw_pipeline_results):
+            # Only process cases with anagram hits
+            if case.get('anagrams') and len(case['anagrams']) > 0:
+                try:
+                    enhanced_case = self.build_word_attribution(case)
+                    enhanced_cases.append(enhanced_case)
+
+                    if (i + 1) % 100 == 0:
+                        print(f"  Processed {i + 1} cases...")
+
+                except Exception as e:
+                    print(f"Warning: Could not enhance case {i + 1}: {e}")
+                    continue
+
+        print(f"Enhanced {len(enhanced_cases)} cases with complete attribution.")
+        return enhanced_cases
+
+    def analyze_case_quality(self, enhanced_case: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze the quality of a case for explanation system development."""
+        anagram_data = enhanced_case.get('anagram_data', {})
+        fodder_letters = anagram_data.get('fodder_letters', '')
+        answer = enhanced_case.get('answer', '')
+        confidence = anagram_data.get('confidence', 0.0)
+        remaining_words = enhanced_case.get('remaining_words', [])
+
+        # Handle string confidence values (like 'provisional')
+        if isinstance(confidence, str):
+            confidence = 0.5  # Default numeric value for string confidences
+
+        # Calculate fodder coverage
+        fodder_coverage = len(fodder_letters) / len(answer) if answer else 0.0
+
+        # Classify quality
+        if fodder_coverage >= 0.8 and confidence >= 0.7:
+            quality = "high"
+        elif fodder_coverage >= 0.6 and confidence >= 0.5:
+            quality = "medium"
+        else:
+            quality = "low"
+
+        return {
+            'quality': quality,
+            'fodder_coverage': fodder_coverage,
+            'confidence': confidence,
+            'has_remaining_words': len(remaining_words) > 0,
+            'remaining_word_count': len(remaining_words)
+        }
+
+    def build_explanations(self, enhanced_cases: List[Dict[str, Any]]) -> List[
+        Dict[str, Any]]:
+        """
+        Main explanation building logic using complete attribution data.
+        """
+        explanations = []
+
+        print("\nBuilding systematic explanations...")
+
+        for case in enhanced_cases:
+            quality_analysis = self.analyze_case_quality(case)
+
+            explanation = {
+                'clue': case['clue'],
+                'answer': case['answer'],
+                'quality': quality_analysis['quality'],
+                'definition_component': {
+                    'text': case['definition_window'],
+                    'contributes_to': case['answer']
+                },
+                'anagram_component': {
+                    'indicator': case['anagram_indicators'],
+                    'fodder': case['anagram_data'].get('fodder_words', []),
+                    'letters_provided': case['anagram_data'].get('fodder_letters', ''),
+                    'confidence': case['anagram_data'].get('confidence', 0.0)
+                },
+                'remaining_analysis': {
+                    'words': case['remaining_words'],
+                    'needs_additional_wordplay': len(case['remaining_words']) > 0,
+                    'suggested_types': self.suggest_wordplay_types(
+                        case['remaining_words'])
+                },
+                'word_attribution': {
+                    'accounted_for': case['accounted_words'],
+                    'remaining': case['remaining_words']
+                }
             }
 
-        print(f"Loaded {len(self.substitution_rules)} substitution rules")
+            explanations.append(explanation)
 
-        # Load wordplay indicators by type
-        cursor = conn.execute("""
-            SELECT word, wordplay_type, subtype, confidence
-            FROM indicators
-            WHERE wordplay_type IS NOT NULL
-            ORDER BY wordplay_type, confidence DESC
-        """)
+        return explanations
 
-        for row in cursor:
-            word = row[0].lower().strip()
-            wordplay_type = row[1].lower()
-            subtype = row[2] or ''
-            confidence = row[3] or 'medium'
-
-            self.wordplay_indicators[wordplay_type].append({
-                'word': word,
-                'subtype': subtype,
-                'confidence': confidence
-            })
-
-        print(f"Loaded indicators for {len(self.wordplay_indicators)} wordplay types")
-        conn.close()
-
-    def analyze_remaining_words(self, remaining_words: List[str]) -> Dict[str, Any]:
-        """
-        Analyze remaining words for compound wordplay patterns
-
-        Args:
-            remaining_words: List of words not accounted for by anagram analysis
-
-        Returns:
-            Dictionary with detected patterns and confidence scores
-        """
-        analysis = {
-            'substitutions_found': [],
-            'other_wordplay_found': [],
-            'total_letters_from_substitutions': '',
-            'confidence_score': 0.0,
-            'explanation': []
-        }
-
-        total_substitution_letters = ""
+    def suggest_wordplay_types(self, remaining_words: List[str]) -> List[str]:
+        """Suggest likely wordplay types for remaining words."""
+        suggestions = []
 
         for word in remaining_words:
             word_lower = word.lower()
 
-            # Check for substitution rules
-            if word_lower in self.substitution_rules:
-                rule = self.substitution_rules[word_lower]
-                substitution_info = {
-                    'word': word,
-                    'becomes': rule['substitution'],
-                    'category': rule['category'],
-                    'confidence': rule['confidence']
-                }
-                analysis['substitutions_found'].append(substitution_info)
-                total_substitution_letters += rule['substitution']
-                analysis['explanation'].append(f"{word} → {rule['substitution']}")
+            # Common substitution candidates
+            substitution_words = {
+                'husband': 'H', 'wife': 'W', 'married': 'M', 'single': 'S',
+                'right': 'R', 'left': 'L', 'king': 'K', 'queen': 'Q',
+                'north': 'N', 'south': 'S', 'east': 'E', 'west': 'W'
+            }
 
-            # Check for other wordplay indicators
-            for wordplay_type, indicators in self.wordplay_indicators.items():
-                if wordplay_type == 'anagram':  # Skip anagram - already processed
-                    continue
+            if word_lower in substitution_words:
+                suggestions.append('substitution')
+            elif word_lower in ['back', 'backwards', 'reverse', 'reversed']:
+                suggestions.append('reversal')
+            elif word_lower in ['inside', 'in', 'within', 'containing']:
+                suggestions.append('container')
+            elif word_lower in ['around', 'about', 'circling']:
+                suggestions.append('container')
 
-                for indicator_info in indicators:
-                    if indicator_info['word'] == word_lower:
-                        wordplay_info = {
-                            'word': word,
-                            'type': wordplay_type,
-                            'subtype': indicator_info['subtype'],
-                            'confidence': indicator_info['confidence']
-                        }
-                        analysis['other_wordplay_found'].append(wordplay_info)
-                        analysis['explanation'].append(
-                            f"{word} ({wordplay_type} indicator)")
-                        break
+        return suggestions
 
-        analysis['total_letters_from_substitutions'] = total_substitution_letters
+    def filter_by_quality(self, explanations: List[Dict[str, Any]],
+                          min_quality: str = 'medium') -> List[Dict[str, Any]]:
+        """Filter explanations by quality level."""
+        quality_order = {'low': 0, 'medium': 1, 'high': 2}
+        min_level = quality_order.get(min_quality, 1)
 
-        # Calculate compound confidence score
-        if analysis['substitutions_found'] or analysis['other_wordplay_found']:
-            base_score = 0.3  # Base for finding any compound patterns
-            substitution_bonus = len(analysis['substitutions_found']) * 0.2
-            wordplay_bonus = len(analysis['other_wordplay_found']) * 0.1
-            analysis['confidence_score'] = min(1.0,
-                                               base_score + substitution_bonus + wordplay_bonus)
+        return [exp for exp in explanations
+                if quality_order.get(exp['quality'], 0) >= min_level]
 
-        return analysis
+    def export_explanations(self, explanations: List[Dict[str, Any]],
+                            filepath: str = None) -> None:
+        """Export explanations to JSON file."""
+        if not filepath:
+            filepath = 'explanation_results.json'
 
-    def test_compound_construction(self, anagram_letters: str, substitution_letters: str,
-                                   target_answer: str) -> Dict[str, Any]:
-        """
-        Test if anagram letters + substitution letters can form the target answer
-        NOTE: target_answer is ONLY used for verification - never for solving
-        """
-        combined_letters = norm_letters(anagram_letters + substitution_letters)
-        target_letters = norm_letters(target_answer)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(explanations, f, indent=2, ensure_ascii=False)
 
-        # Check if we have the right letters (for debugging purposes only)
-        combined_sorted = ''.join(sorted(combined_letters))
-        target_sorted = ''.join(sorted(target_letters))
-
-        construction_test = {
-            'anagram_letters': anagram_letters,
-            'substitution_letters': substitution_letters,
-            'combined_letters': combined_letters,
-            'target_letters': target_letters,
-            'letters_match': combined_sorted == target_sorted,
-            'missing_letters': '',
-            'excess_letters': ''
-        }
-
-        if not construction_test['letters_match']:
-            # Calculate missing/excess for debugging
-            combined_counts = Counter(combined_letters)
-            target_counts = Counter(target_letters)
-
-            missing = []
-            for letter, count in target_counts.items():
-                if combined_counts[letter] < count:
-                    missing.extend([letter] * (count - combined_counts[letter]))
-
-            excess = []
-            for letter, count in combined_counts.items():
-                if target_counts[letter] < count:
-                    excess.extend([letter] * (count - target_counts[letter]))
-
-            construction_test['missing_letters'] = ''.join(sorted(missing))
-            construction_test['excess_letters'] = ''.join(sorted(excess))
-
-        return construction_test
-
-    def analyze_compound_case(self, case_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Analyze a single case for compound wordplay patterns
-
-        Args:
-            case_data: Case from pipeline_simulator with anagram evidence and remaining words
-
-        Returns:
-            Comprehensive compound analysis
-        """
-        self.stats['total_cases'] += 1
-
-        clue = case_data.get('clue', '')
-        answer = case_data.get('answer', '')
-        remaining_words = case_data.get('remaining_words', [])
-        anagram_evidence = case_data.get('anagram_evidence', {})
-
-        # Skip cases with no remaining words
-        if not remaining_words:
-            return None
-
-        # Analyze remaining words for compound patterns
-        compound_analysis = self.analyze_remaining_words(remaining_words)
-
-        # If substitutions found, test complete construction
-        construction_result = None
-        if compound_analysis['substitutions_found']:
-            anagram_letters = anagram_evidence.get('fodder_letters', '')
-            substitution_letters = compound_analysis['total_letters_from_substitutions']
-
-            construction_result = self.test_compound_construction(
-                anagram_letters, substitution_letters, answer
-            )
-
-            if construction_result['letters_match']:
-                self.stats['compound_solutions'] += 1
-
-        # Update statistics
-        if compound_analysis['substitutions_found']:
-            self.stats['substitution_hits'] += 1
-        if compound_analysis['other_wordplay_found']:
-            self.stats['multi_wordplay_hits'] += 1
-        if compound_analysis['confidence_score'] > 0:
-            self.stats['confidence_scores'].append(compound_analysis['confidence_score'])
-
-        result = {
-            'clue': clue,
-            'answer': answer,
-            'remaining_words': remaining_words,
-            'anagram_evidence': anagram_evidence,
-            'compound_analysis': compound_analysis,
-            'construction_result': construction_result,
-            'overall_confidence': compound_analysis['confidence_score']
-        }
-
-        return result
-
-    def print_analysis_results(self, results: List[Dict[str, Any]],
-                               max_display: int = 20):
-        """Print compound analysis results in evidence_analysis.py style"""
-
-        print("\n" + "=" * 80)
-        print("COMPOUND WORDPLAY ANALYSIS RESULTS")
-        print("=" * 80)
-
-        # Print statistics
-        print(f"\nSTATISTICS:")
-        print(f"  Total cases analyzed: {self.stats['total_cases']}")
-        print(f"  Cases with substitutions: {self.stats['substitution_hits']}")
-        print(f"  Cases with other wordplay: {self.stats['multi_wordplay_hits']}")
-        print(f"  Compound solutions found: {self.stats['compound_solutions']}")
-        if self.stats['confidence_scores']:
-            avg_confidence = sum(self.stats['confidence_scores']) / len(
-                self.stats['confidence_scores'])
-            print(f"  Average confidence: {avg_confidence:.3f}")
-
-        print(f"\nDETAILED RESULTS (showing first {max_display}):")
-        print("-" * 80)
-
-        # Sort by confidence score (highest first)
-        sorted_results = sorted([r for r in results if r],
-                                key=lambda x: x['overall_confidence'], reverse=True)
-
-        for i, result in enumerate(sorted_results[:max_display], 1):
-            print(f"\n[{i}] CLUE: {result['clue']}")
-            print(f"    ANSWER: {result['answer']}")
-            print(f"    REMAINING WORDS: {result['remaining_words']}")
-
-            # Anagram evidence summary
-            anag = result['anagram_evidence']
-            print(
-                f"    ANAGRAM: {' + '.join(anag.get('fodder_words', []))} → {anag.get('fodder_letters', '')}")
-
-            # Compound analysis
-            comp = result['compound_analysis']
-            if comp['substitutions_found']:
-                print(f"    SUBSTITUTIONS:")
-                for sub in comp['substitutions_found']:
-                    print(f"      {sub['word']} → {sub['becomes']} ({sub['category']})")
-
-            if comp['other_wordplay_found']:
-                print(f"    OTHER WORDPLAY:")
-                for wp in comp['other_wordplay_found']:
-                    print(f"      {wp['word']} ({wp['type']})")
-
-            # Construction test
-            if result['construction_result']:
-                cons = result['construction_result']
-                print(f"    CONSTRUCTION TEST:")
-                print(
-                    f"      {cons['anagram_letters']} + {cons['substitution_letters']} = {cons['combined_letters']}")
-                print(f"      Target: {cons['target_letters']}")
-                print(f"      Match: {'✓' if cons['letters_match'] else '✗'}")
-                if not cons['letters_match']:
-                    if cons['missing_letters']:
-                        print(f"      Missing: {cons['missing_letters']}")
-                    if cons['excess_letters']:
-                        print(f"      Excess: {cons['excess_letters']}")
-
-            print(f"    CONFIDENCE: {result['overall_confidence']:.3f}")
-            print(f"    EXPLANATION: {' | '.join(comp['explanation'])}")
-            print("-" * 80)
+        print(f"Exported {len(explanations)} explanations to {filepath}")
 
 
 def main():
-    """
-    Main analysis function - processes cohort from pipeline_simulator
-    """
-    # For now, create some test cases to validate the compound analysis
-    # In practice, this would read from pipeline_simulator output
+    """Main execution function."""
+    print("=== EXPLANATION SYSTEM BUILDER ===")
 
-    print("COMPOUND WORDPLAY ANALYZER")
-    print("Loading resources...")
+    # Initialize explanation system
+    builder = ExplanationSystemBuilder()
 
-    analyzer = CompoundWordplayAnalyzer()
+    # TODO: Load pipeline results
+    # For now, return placeholder
+    print("Ready to process pipeline simulator results.")
+    print("Next step: Load pipeline data and call enhance_pipeline_data()")
 
-    # Test case based on HANDSOME example
-    test_cases = [
-        {
-            'clue': 'Good-looking husband one\'s mad to change',
-            'answer': 'HANDSOME',
-            'remaining_words': ['Good-looking', 'husband', 'to', 'change'],
-            'anagram_evidence': {
-                'fodder_words': ['one\'s', 'mad'],
-                'fodder_letters': 'ONESAMD',
-                'evidence_type': 'partial',
-                'confidence': 0.7
-            }
-        }
-    ]
-
-    print(f"\nAnalyzing {len(test_cases)} test cases...")
-    results = []
-
-    for case in test_cases:
-        result = analyzer.analyze_compound_case(case)
-        if result:
-            results.append(result)
-
-    analyzer.print_analysis_results(results)
-
-    print(f"\n{'=' * 80}")
-    print("COMPOUND ANALYSIS COMPLETE")
-    print(f"{'=' * 80}")
+    return builder
 
 
 if __name__ == "__main__":
-    main()
+    builder = main()

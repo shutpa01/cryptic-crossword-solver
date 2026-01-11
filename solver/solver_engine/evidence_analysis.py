@@ -16,9 +16,14 @@ Architecture:
 import sys
 import os
 
+# Add project root to path
+sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
+
 # Import the original pipeline simulator (maintaining sanctity)
 from pipeline_simulator import run_pipeline_probe, MAX_CLUES, WORDPLAY_TYPE
 from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
+from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
+
 # Evidence scoring configuration
 ENABLE_EVIDENCE_SCORING = True
 EVIDENCE_SCORE_WEIGHT = 1.0
@@ -40,6 +45,19 @@ class EvidenceAnalyzer:
                 print(f"WARNING: Evidence detector failed to load: {e}")
                 self.detector = None
 
+    def is_successful_anagram_clue(self, record):
+        """
+        Check if a clue successfully found anagram hits.
+
+        Successful anagram criteria:
+        - Has definition candidates
+        - Has anagram hits (anagram_hits > 0)
+        """
+        summary = record.get("summary", {})
+        has_def_candidates = summary.get("definition_candidates", 0) > 0
+        has_anagram_hits = summary.get("anagram_hits", 0) > 0
+        return has_def_candidates and has_anagram_hits
+
     def is_unresolved_clue(self, record):
         """
         Check if a clue is unresolved (has definition candidates but no wordplay hits).
@@ -59,7 +77,7 @@ class EvidenceAnalyzer:
 
         return has_def_candidates and no_anagram_hits and no_lurker_hits and no_dd_hits
 
-    def apply_evidence_scoring(self, record):
+    def apply_evidence_scoring(self, record, debug=False):
         """
         Apply evidence-based scoring to unresolved clue.
         Returns enhanced record with scoring information.
@@ -74,9 +92,52 @@ class EvidenceAnalyzer:
         if not candidates:
             return record
 
-        # Analyze for anagram evidence
-        evidence_list = self.detector.analyze_clue_for_anagram_evidence(
-            clue_text, candidates, enumeration=record.get("enumeration"))
+        # Use the same anagram system that pipeline uses
+        enumeration_num = len(answer) if answer else 0
+
+        if debug:
+            print(f"DEBUG: Calling generate_anagram_hypotheses for '{clue_text[:50]}...'")
+            print(
+                f"DEBUG: enumeration_num={enumeration_num}, candidates_count={len(candidates)}")
+
+        hypotheses = generate_anagram_hypotheses(clue_text, enumeration_num, candidates)
+
+        if debug:
+            print(f"DEBUG: Got {len(hypotheses)} hypotheses")
+            if hypotheses:
+                print(f"DEBUG: First hypothesis: {hypotheses[0]}")
+
+        # Convert hypotheses to evidence-like objects for compatibility
+        evidence_list = []
+        for hyp in hypotheses:
+            # Create simple evidence object from hypothesis
+            class Evidence:
+                def __init__(self, candidate, fodder_words, fodder_letters, evidence_type,
+                             confidence):
+                    self.candidate = candidate
+                    self.fodder_words = fodder_words
+                    self.fodder_letters = fodder_letters
+                    self.evidence_type = evidence_type
+                    self.confidence = confidence
+
+            # Convert confidence from string to float if needed
+            confidence_raw = hyp.get("confidence", 1.0)
+            if isinstance(confidence_raw, str):
+                # Map string confidence to numeric values
+                confidence_map = {'provisional': 0.5, 'high': 0.9, 'medium': 0.7,
+                                  'low': 0.3}
+                confidence = confidence_map.get(confidence_raw.lower(), 0.5)
+            else:
+                confidence = confidence_raw
+
+            evidence = Evidence(
+                candidate=hyp.get("answer", ""),
+                fodder_words=hyp.get("fodder_words", []),
+                fodder_letters=hyp.get("fodder_letters", ""),
+                evidence_type=hyp.get("evidence_type", hyp.get("solve_type", "exact")),
+                confidence=confidence
+            )
+            evidence_list.append(evidence)
 
         # Create scored candidates list
         scored_candidates = []
@@ -127,28 +188,33 @@ class EvidenceAnalyzer:
 
         return enhanced_record
 
-    def analyze_unresolved_cohort(self, results):
+    def analyze_successful_anagram_cohort(self, results):
         """
-        Analyze the unresolved cohort from pipeline simulator results.
-        Returns enhanced results with evidence scoring.
+        Analyze the successful anagram cohort from pipeline simulator results.
+        Returns enhanced results showing how anagrams were successfully solved.
         """
-        unresolved_clues = [r for r in results if self.is_unresolved_clue(r)]
+        successful_anagram_clues = [r for r in results if
+                                    self.is_successful_anagram_clue(r)]
 
-        print(f"\n🔍 UNRESOLVED COHORT ANALYSIS:")
+        print(f"\n🔍 SUCCESSFUL ANAGRAM COHORT ANALYSIS:")
         print(f"Total clues processed: {len(results)}")
-        print(f"Unresolved clues (no wordplay hits): {len(unresolved_clues)}")
+        print(f"Successful anagram clues: {len(successful_anagram_clues)}")
 
-        if not unresolved_clues:
-            print("No unresolved clues to analyze.")
+        if not successful_anagram_clues:
+            print("No successful anagram clues to analyze.")
             return []
 
-        # Apply evidence scoring to unresolved clues
+        # Apply evidence scoring to successful anagram clues
         enhanced_results = []
         evidence_improvements = 0
+        debug_count = 0  # Limit debug output
 
-        for record in unresolved_clues:
-            enhanced = self.apply_evidence_scoring(record)
+        for record in successful_anagram_clues:
+            # Add debug flag for first few records
+            debug_this = debug_count < 3
+            enhanced = self.apply_evidence_scoring(record, debug=debug_this)
             enhanced_results.append(enhanced)
+            debug_count += 1
 
             # Count improvements
             evidence_analysis = enhanced.get("evidence_analysis", {})
@@ -260,7 +326,7 @@ def main():
     print("🔧 EVIDENCE-BASED SCORING ANALYSIS")
     print("=" * 60)
     print("Maintaining absolute sanctity of original pipeline simulator")
-    print("Only analyzing unresolved cohort (no wordplay hits)")
+    print("Analyzing successful anagram cohort (showing how anagrams are solved)")
     print("=" * 60)
 
     # Initialize evidence analyzer
@@ -294,9 +360,9 @@ def main():
     print(f"  clues w/ lurker hit       : {overall['clues_with_lurker']}")
     print(f"  clues w/ DD hit           : {overall['clues_with_dd']}")
 
-    # Step 2: Analyze unresolved cohort only
-    print("\n🔍 STEP 2: Analyzing unresolved cohort...")
-    enhanced_results = analyzer.analyze_unresolved_cohort(results)
+    # Step 2: Analyze successful anagram cohort
+    print("\n🔍 STEP 2: Analyzing successful anagram cohort...")
+    enhanced_results = analyzer.analyze_successful_anagram_cohort(results)
 
     # Step 3: Display evidence analysis
     if enhanced_results:
