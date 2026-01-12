@@ -9,13 +9,27 @@ This module provides sophisticated anagram detection that goes beyond simple let
 - Integrates with existing candidate scoring system
 - Provides detailed evidence reporting
 - Uses progressive expansion from indicators to find anagram fodder
+
+CORRECTED VERSION: Enforces four rules for fodder:
+1. Indicator detection - single word first, then two-word if needed, with positions
+2. Proximity - fodder must be adjacent to indicator (one link word allowed)
+3. Contiguity - fodder words must be next to each other in the clue
+4. Whole words - fodder is complete words, not cherry-picked letters
 """
 
 import re
 import itertools
 from collections import Counter
 from typing import List, Dict, Tuple, Optional, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+# Import the working anagram function
+import sys
+import os
+
+sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
+# NOTE: generate_anagram_hypotheses imported lazily in analyze_and_rank_anagram_candidates
+# to avoid circular import with anagram_stage.py
 
 
 @dataclass
@@ -24,15 +38,56 @@ class AnagramEvidence:
     candidate: str
     fodder_words: List[str]
     fodder_letters: str
-    evidence_type: str  # "exact", "deletion", "insertion"
+    evidence_type: str  # "exact", "deletion", "insertion", "partial"
     confidence: float
     excess_letters: str = ""  # Letters not used (deletion case)
     needed_letters: str = ""  # Letters needed (insertion case)
+
+    # NEW: Complete word attribution for compound analysis
+    indicator_words: List[str] = None  # The anagram indicator(s)
+    indicator_position: int = -1  # Position of indicator in token list
+    definition_words: List[str] = None  # Definition window words (if known)
+    link_words: List[str] = None  # Link words identified
+    remaining_words: List[str] = None  # Words available for compound wordplay
+
+    # Deprecated: keeping for backward compatibility
     unused_clue_words: List[str] = None
 
     def __post_init__(self):
         if self.unused_clue_words is None:
             self.unused_clue_words = []
+        if self.indicator_words is None:
+            self.indicator_words = []
+        if self.definition_words is None:
+            self.definition_words = []
+        if self.link_words is None:
+            self.link_words = []
+        if self.remaining_words is None:
+            self.remaining_words = []
+
+
+@dataclass
+class IndicatorMatch:
+    """Stores indicator match with position info."""
+    words: List[str]
+    start_pos: int
+    end_pos: int  # inclusive
+    is_multi_word: bool
+
+
+@dataclass
+class ContiguousFodder:
+    """A valid contiguous fodder sequence adjacent to an indicator."""
+    words: List[str]
+    positions: List[int]
+    letters: str
+    indicator: IndicatorMatch
+    side: str  # 'left' or 'right' of indicator
+
+
+# Link words that can appear between indicator and fodder
+LINK_WORDS = {'to', 'of', 'in', 'for', 'with', 'by', 'from', 'a', 'an', 'the',
+              'and', 'is', 'are', 'needs', 'about', 'on', 'after'}
 
 
 class ComprehensiveWordplayDetector:
@@ -43,7 +98,9 @@ class ComprehensiveWordplayDetector:
         self.db_path = db_path or r"C:\Users\shute\PycharmProjects\cryptic_solver\data\cryptic_new.db"
 
         # Load all indicators from database by type
-        self.anagram_indicators = []
+        self.anagram_indicators = []  # Keep for backward compatibility
+        self.anagram_indicators_single: Set[str] = set()  # NEW: single-word only
+        self.anagram_indicators_two_word: Set[str] = set()  # NEW: two-word only
         self.insertion_indicators = []
         self.deletion_indicators = []
         self.reversal_indicators = []
@@ -84,6 +141,11 @@ class ComprehensiveWordplayDetector:
 
                 if wordplay_type == 'anagram':
                     self.anagram_indicators.append(word_lower)
+                    # NEW: Split into single and two-word
+                    if ' ' in word_lower:
+                        self.anagram_indicators_two_word.add(word_lower)
+                    else:
+                        self.anagram_indicators_single.add(word_lower)
                 elif wordplay_type == 'insertion':
                     self.insertion_indicators.append(word_lower)
                 elif wordplay_type == 'deletion':
@@ -98,7 +160,8 @@ class ComprehensiveWordplayDetector:
             conn.close()
 
             print(f"Loaded comprehensive indicators from database:")
-            print(f"  Anagram indicators: {len(self.anagram_indicators)}")
+            print(
+                f"  Anagram indicators: {len(self.anagram_indicators)} ({len(self.anagram_indicators_single)} single-word, {len(self.anagram_indicators_two_word)} two-word)")
             print(f"  Insertion indicators: {len(self.insertion_indicators)}")
             print(f"  Deletion indicators: {len(self.deletion_indicators)}")
             print(f"  Reversal indicators: {len(self.reversal_indicators)}")
@@ -107,9 +170,13 @@ class ComprehensiveWordplayDetector:
             print(f"  Total indicators loaded: {len(all_indicators)}")
 
             # Show sample of each type for verification
-            if self.anagram_indicators:
-                sample = self.anagram_indicators[:5]
-                print(f"  Sample anagram indicators: {', '.join(sample)}")
+            if self.anagram_indicators_single:
+                sample = list(self.anagram_indicators_single)[:5]
+                print(f"  Sample single-word anagram indicators: {', '.join(sample)}")
+
+            if self.anagram_indicators_two_word:
+                sample = list(self.anagram_indicators_two_word)[:5]
+                print(f"  Sample two-word anagram indicators: {', '.join(sample)}")
 
             if self.insertion_indicators:
                 sample = self.insertion_indicators[:5]
@@ -124,6 +191,9 @@ class ComprehensiveWordplayDetector:
             # Minimal fallback list
             self.anagram_indicators = ['confused', 'mixed', 'jumbled', 'corrupted',
                                        'converts', 'exceptional', 'comic']
+            self.anagram_indicators_single = {'confused', 'mixed', 'jumbled', 'corrupted',
+                                              'converts', 'exceptional', 'comic'}
+            self.anagram_indicators_two_word = {'move round', 'going round', 'mixed up'}
             self.insertion_indicators = ['in', 'inside', 'within', 'among', 'held by']
             self.deletion_indicators = ['lost', 'missing', 'without', 'dropped']
             self.reversal_indicators = ['back', 'returning', 'reversed']
@@ -238,6 +308,9 @@ class ComprehensiveWordplayDetector:
         """
         Generate all possible combinations of words (1 to all words).
         Returns list of word combinations, sorted by likelihood.
+
+        NOTE: This is kept for backward compatibility but should not be used
+        for fodder finding. Use get_contiguous_fodder_sequences instead.
         """
         combinations = []
 
@@ -251,21 +324,61 @@ class ComprehensiveWordplayDetector:
 
         return combinations
 
+    def _tokenize_clue(self, clue_text: str) -> List[str]:
+        """
+        Split clue into word tokens.
+        Filters out punctuation and enumeration markers.
+        Returns list of clean word tokens.
+        """
+        raw_tokens = clue_text.split()
+        tokens = []
+        for token in raw_tokens:
+            # Strip punctuation from edges
+            cleaned = token.strip('.,!?:;()—-"\'')
+            # Skip empty, pure punctuation, or enumeration like (8)
+            if cleaned and cleaned.isalpha():
+                tokens.append(cleaned)
+        return tokens
+
     def detect_wordplay_indicators(self, clue_text: str) -> Dict[str, List[str]]:
         """
         Detect anagram indicators in clue text.
         Returns dict with anagram indicators found.
+
+        CORRECTED: Now also populates indicator_positions for use by
+        get_contiguous_fodder_sequences. Check single-word first,
+        then two-word only if no single-word found.
         """
-        clue_words = [word.lower().strip('.,!?:;()') for word in clue_text.split()]
+        tokens = self._tokenize_clue(clue_text)
 
         found = {
-            'anagram': []
+            'anagram': [],
+            'anagram_matches': []  # NEW: List of IndicatorMatch objects
         }
 
-        for word in clue_words:
-            # Only check anagram indicators
-            if word in self.anagram_indicators:
-                found['anagram'].append(word)
+        # First pass: single-word indicators
+        for i, token in enumerate(tokens):
+            if token.lower() in self.anagram_indicators_single:
+                found['anagram'].append(token.lower())
+                found['anagram_matches'].append(IndicatorMatch(
+                    words=[token],
+                    start_pos=i,
+                    end_pos=i,
+                    is_multi_word=False
+                ))
+
+        # Second pass: two-word indicators (only if no single-word found)
+        if not found['anagram_matches']:
+            for i in range(len(tokens) - 1):
+                two_word = f"{tokens[i].lower()} {tokens[i + 1].lower()}"
+                if two_word in self.anagram_indicators_two_word:
+                    found['anagram'].append(two_word)
+                    found['anagram_matches'].append(IndicatorMatch(
+                        words=[tokens[i], tokens[i + 1]],
+                        start_pos=i,
+                        end_pos=i + 1,
+                        is_multi_word=True
+                    ))
 
         return found
 
@@ -273,39 +386,156 @@ class ComprehensiveWordplayDetector:
                                      candidates: List[str]) -> list:
         """
         Progressive expansion from indicator positions to find anagram fodder.
-        FIXED: Test contribution FIRST, then treat as link word only if doesn't contribute.
+
+        CORRECTED: Actually implements contiguous expansion from indicators.
+        This method now returns words that are:
+        1. Adjacent to an indicator (with at most one link word between)
+        2. Contiguous (next to each other)
+        3. Whole words
+
+        Returns list of fodder word lists (each is a contiguous sequence).
         """
-        anagram_indicators = indicators.get('anagram', [])
-        if not anagram_indicators:
+        anagram_matches = indicators.get('anagram_matches', [])
+        if not anagram_matches:
             return []
 
-        # Split clue into words and find indicator positions
-        clue_words = [word.strip('.,!?:;()') for word in clue_text.split()]
-        indicator_positions = []
+        tokens = self._tokenize_clue(clue_text)
+        all_fodder_sequences = []
 
-        for i, word in enumerate(clue_words):
-            if word.lower() in anagram_indicators:
-                indicator_positions.append(i)
+        for indicator in anagram_matches:
+            # Expand left
+            left_sequences = self._expand_from_indicator(tokens, indicator, 'left')
+            all_fodder_sequences.extend(left_sequences)
 
-        if not indicator_positions:
+            # Expand right
+            right_sequences = self._expand_from_indicator(tokens, indicator, 'right')
+            all_fodder_sequences.extend(right_sequences)
+
+        # Return flat list of words from all sequences for backward compatibility
+        # The caller can use get_contiguous_fodder_sequences for structured data
+        all_words = []
+        for seq in all_fodder_sequences:
+            all_words.extend(seq.words)
+
+        return list(set(all_words))  # Deduplicate
+
+    def _expand_from_indicator(self, tokens: List[str], indicator: IndicatorMatch,
+                               direction: str) -> List[ContiguousFodder]:
+        """
+        Expand in one direction from indicator to find valid contiguous fodder.
+        Allows skipping one link word at the boundary.
+
+        Returns list of ContiguousFodder objects (all valid contiguous sequences).
+        """
+        results = []
+        n = len(tokens)
+
+        if direction == 'left':
+            boundary = indicator.start_pos - 1
+            step = -1
+        else:
+            boundary = indicator.end_pos + 1
+            step = 1
+
+        if boundary < 0 or boundary >= n:
+            return results
+
+        # Check if boundary word is a link word - if so, skip it
+        start_pos = boundary
+        if tokens[boundary].lower() in LINK_WORDS:
+            start_pos = boundary + step
+            if start_pos < 0 or start_pos >= n:
+                return results
+
+        # Expand contiguously from start_pos
+        current_words = []
+        current_positions = []
+        pos = start_pos
+
+        while 0 <= pos < n:
+            token = tokens[pos]
+
+            # Stop if we hit an indicator word
+            if token.lower() in self.anagram_indicators_single:
+                break
+
+            # Stop if we hit a link word after fodder has started
+            if token.lower() in LINK_WORDS and current_words:
+                break
+
+            # Skip link words at the start
+            if token.lower() in LINK_WORDS and not current_words:
+                pos += step
+                continue
+
+            # Add this word to fodder
+            current_words.append(token)
+            current_positions.append(pos)
+
+            # Get ordered words (left expansion needs reversal)
+            if direction == 'left':
+                ordered_words = list(reversed(current_words))
+                ordered_positions = list(reversed(current_positions))
+            else:
+                ordered_words = current_words[:]
+                ordered_positions = current_positions[:]
+
+            letters = self.normalize_letters(' '.join(ordered_words))
+
+            # Record this as a valid contiguous sequence
+            results.append(ContiguousFodder(
+                words=ordered_words,
+                positions=ordered_positions,
+                letters=letters,
+                indicator=indicator,
+                side=direction
+            ))
+
+            pos += step
+
+        return results
+
+    def get_contiguous_fodder_sequences(self, clue_text: str, indicators: dict,
+                                        target_length: int = None) -> List[
+        ContiguousFodder]:
+        """
+        Get all valid contiguous fodder sequences for a clue.
+
+        This is the main method for finding fodder that enforces all four rules:
+        1. Indicator position tracking
+        2. Proximity to indicator
+        3. Contiguity of fodder words
+        4. Whole words only
+
+        Args:
+            clue_text: The clue text
+            indicators: Dict from detect_wordplay_indicators
+            target_length: Optional filter for exact letter count match
+
+        Returns:
+            List of ContiguousFodder objects
+        """
+        anagram_matches = indicators.get('anagram_matches', [])
+        if not anagram_matches:
             return []
 
-        # FIXED: Common link words that connect indicators to fodder (added 'needs')
-        link_words = {'in', 'with', 'of', 'needs', 'to', 'for', 'by', 'from', 'about',
-                      'on', 'after', 'and'}
+        tokens = self._tokenize_clue(clue_text)
+        all_sequences = []
 
-        # Collect fodder words from all indicators
-        all_fodder_positions = set()
+        for indicator in anagram_matches:
+            # Expand left
+            left = self._expand_from_indicator(tokens, indicator, 'left')
+            all_sequences.extend(left)
 
+            # Expand right
+            right = self._expand_from_indicator(tokens, indicator, 'right')
+            all_sequences.extend(right)
 
-        # Return words at fodder positions (excluding indicators)
-        fodder_words = []
-        for pos in sorted(all_fodder_positions):
-            word = clue_words[pos]
-            if word.lower() not in anagram_indicators and len(word) > 1:
-                fodder_words.append(word)
+        # Filter by target length if specified
+        if target_length is not None:
+            all_sequences = [s for s in all_sequences if len(s.letters) == target_length]
 
-        return fodder_words
+        return all_sequences
 
     def _can_word_contribute_to_candidates(self, word: str,
                                            candidates: List[str]) -> bool:
@@ -331,7 +561,11 @@ class ComprehensiveWordplayDetector:
                               indicators: Dict[str, List[str]], enumeration: str = None,
                               debug: bool = False) -> Optional[AnagramEvidence]:
         """
-        Test for anagram evidence using progressive expansion from indicators.
+        Test for anagram evidence using contiguous fodder from indicators.
+
+        CORRECTED: Now only tests contiguous fodder sequences adjacent to indicators,
+        not all possible word combinations.
+
         Returns AnagramEvidence if match found, None otherwise.
         """
         candidate_letters = self.normalize_letters(candidate)
@@ -345,68 +579,74 @@ class ComprehensiveWordplayDetector:
                     f"    REJECTED: Self-anagram - '{candidate}' appears verbatim in clue")
             return None
 
-        # Use progressive expansion to find fodder words near indicators
-        candidates_list = [candidate]  # Pass current candidate for fodder testing
-        progressive_words = self.get_progressive_fodder_words(clue_text, indicators,
-                                                              candidates_list)
+        # Get contiguous fodder sequences (enforces all four rules)
+        target_length = len(candidate_letters)
+        fodder_sequences = self.get_contiguous_fodder_sequences(
+            clue_text, indicators, target_length=None  # Get all, filter later
+        )
 
-        if not progressive_words:
+        if not fodder_sequences:
             if debug:
-                print(f"    NO PROGRESSIVE FODDER WORDS found near indicators")
-            return None
-
-        # Apply stop word filtering to progressive words
-        stop_words = {'the', 'a', 'an', 'of', 'in', 'to', 'for', 'with', 'by', 'from'}
-        content_words = [w for w in progressive_words if
-                         w.lower() not in stop_words and len(w) > 1]
-
-        if not content_words:
-            if debug:
-                print(f"    NO CONTENT WORDS after filtering progressive words")
+                print(f"    NO CONTIGUOUS FODDER SEQUENCES found near indicators")
             return None
 
         if debug:
             print(
                 f"    DEBUG: Testing candidate '{candidate}' ({len(candidate_letters)} letters)")
-            print(f"    Progressive fodder words: {progressive_words}")
-            print(f"    Content words (after filtering): {content_words}")
+            print(f"    Found {len(fodder_sequences)} contiguous fodder sequences")
 
-        # Test all possible word combinations from progressive words
-        word_combinations = self.get_all_word_combinations(content_words)
+        # Get all tokens for unused word calculation
+        tokens = self._tokenize_clue(clue_text)
 
         best_evidence = None
         best_score = 0.0
 
-        if debug:
-            print(f"    Testing {len(word_combinations)} word combinations...")
+        for i, fodder in enumerate(fodder_sequences):
+            fodder_letters = fodder.letters
 
-        for i, word_combo in enumerate(word_combinations):
-            fodder_text = ' '.join(word_combo)
-            fodder_letters = self.normalize_letters(fodder_text)
-
-            if not fodder_letters:
-                continue
-
-            if debug and i < 10:  # Show first 10 combinations
+            if debug and i < 10:
                 print(
-                    f"      [{i + 1:2d}] Testing: {word_combo} → '{fodder_letters}' ({len(fodder_letters)} letters)")
+                    f"      [{i + 1:2d}] Testing: {fodder.words} → '{fodder_letters}' ({len(fodder_letters)} letters)")
 
             # Test exact anagram match first (highest priority)
             if self.is_anagram(candidate_letters, fodder_letters):
                 if debug:
                     print(f"      ★ EXACT ANAGRAM MATCH!")
-                unused_words = [w for w in content_words if w not in word_combo]
+
+                # Calculate complete word attribution
+                indicator_words = list(fodder.indicator.words)
+                fodder_word_set = set(w.lower() for w in fodder.words)
+                indicator_word_set = set(w.lower() for w in indicator_words)
+
+                # Identify link words and remaining words
+                link_words_found = []
+                remaining_words = []
+                for t in tokens:
+                    t_lower = t.lower()
+                    if t_lower in fodder_word_set:
+                        continue  # Already accounted as fodder
+                    if t_lower in indicator_word_set:
+                        continue  # Already accounted as indicator
+                    if t_lower in LINK_WORDS:
+                        link_words_found.append(t)
+                    else:
+                        remaining_words.append(t)
+
                 return AnagramEvidence(
                     candidate=candidate,
-                    fodder_words=word_combo,
+                    fodder_words=list(fodder.words),
                     fodder_letters=fodder_letters,
                     evidence_type="exact",
                     confidence=0.9,
-                    unused_clue_words=unused_words
+                    indicator_words=indicator_words,
+                    indicator_position=fodder.indicator.start_pos,
+                    link_words=link_words_found,
+                    remaining_words=remaining_words,
+                    unused_clue_words=remaining_words  # Backward compatibility
                 )
 
             # Test partial contribution (only if anagram indicators present)
-            if indicators['anagram']:
+            if indicators.get('anagram'):
                 can_contribute, contribution_ratio, remaining_letters = self.can_contribute_letters(
                     candidate_letters, fodder_letters)
 
@@ -435,7 +675,7 @@ class ComprehensiveWordplayDetector:
                     primary_score = explained_letters
 
                     # TERTIARY: Word count penalty (fewer words = higher score)
-                    word_count_factor = 1.0 / len(word_combo)
+                    word_count_factor = 1.0 / len(fodder.words)
 
                     # Combined score: enumeration dominates, then letters, then coherence
                     evidence_score = enumeration_bonus + primary_score + word_count_factor
@@ -446,18 +686,39 @@ class ComprehensiveWordplayDetector:
                     if debug and i < 10:
                         enum_status = "✅" if enumeration_bonus > 0 else "❌" if enumeration_bonus < 0 else "?"
                         print(
-                            f"           → Score: {evidence_score:.2f} ({enum_status} enum={enumeration_bonus}, letters={explained_letters}/{total_letters}, words={len(word_combo)}, confidence={confidence:.2f})")
+                            f"           → Score: {evidence_score:.2f} ({enum_status} enum={enumeration_bonus}, letters={explained_letters}/{total_letters}, words={len(fodder.words)}, confidence={confidence:.2f})")
 
                     if evidence_score > best_score:
-                        unused_words = [w for w in content_words if w not in word_combo]
+                        # Calculate complete word attribution
+                        indicator_words = list(fodder.indicator.words)
+                        fodder_word_set = set(w.lower() for w in fodder.words)
+                        indicator_word_set = set(w.lower() for w in indicator_words)
+
+                        link_words_found = []
+                        remaining_words = []
+                        for t in tokens:
+                            t_lower = t.lower()
+                            if t_lower in fodder_word_set:
+                                continue
+                            if t_lower in indicator_word_set:
+                                continue
+                            if t_lower in LINK_WORDS:
+                                link_words_found.append(t)
+                            else:
+                                remaining_words.append(t)
+
                         best_evidence = AnagramEvidence(
                             candidate=candidate,
-                            fodder_words=word_combo,
+                            fodder_words=list(fodder.words),
                             fodder_letters=fodder_letters,
                             evidence_type="partial",
                             confidence=confidence,
-                            needed_letters=remaining_letters,  # Letters still needed
-                            unused_clue_words=unused_words
+                            needed_letters=remaining_letters,
+                            indicator_words=indicator_words,
+                            indicator_position=fodder.indicator.start_pos,
+                            link_words=link_words_found,
+                            remaining_words=remaining_words,
+                            unused_clue_words=remaining_words  # Backward compatibility
                         )
                         best_score = evidence_score
 
@@ -466,7 +727,7 @@ class ComprehensiveWordplayDetector:
                                 f"           ★ NEW BEST PARTIAL EVIDENCE! Score: {best_score:.2f}")
 
             # Also test for deletion anagrams (≤2 excess letters)
-            if indicators['anagram']:
+            if indicators.get('anagram'):
                 can_delete, excess = self.can_form_by_deletion_strict(candidate_letters,
                                                                       fodder_letters)
                 if can_delete:
@@ -474,8 +735,25 @@ class ComprehensiveWordplayDetector:
                         print(
                             f"           Deletion: can_delete={can_delete}, excess='{excess}'")
 
-                    unused_words = [w for w in content_words if w not in word_combo]
-                    deletion_confidence = 0.8  # High confidence for clean deletion
+                    # Calculate complete word attribution
+                    indicator_words = list(fodder.indicator.words)
+                    fodder_word_set = set(w.lower() for w in fodder.words)
+                    indicator_word_set = set(w.lower() for w in indicator_words)
+
+                    link_words_found = []
+                    remaining_words = []
+                    for t in tokens:
+                        t_lower = t.lower()
+                        if t_lower in fodder_word_set:
+                            continue
+                        if t_lower in indicator_word_set:
+                            continue
+                        if t_lower in LINK_WORDS:
+                            link_words_found.append(t)
+                        else:
+                            remaining_words.append(t)
+
+                    deletion_confidence = 0.8
 
                     if debug:
                         print(
@@ -483,12 +761,16 @@ class ComprehensiveWordplayDetector:
 
                     return AnagramEvidence(
                         candidate=candidate,
-                        fodder_words=word_combo,
+                        fodder_words=list(fodder.words),
                         fodder_letters=fodder_letters,
                         evidence_type="deletion",
                         confidence=deletion_confidence,
                         excess_letters=excess,
-                        unused_clue_words=unused_words
+                        indicator_words=indicator_words,
+                        indicator_position=fodder.indicator.start_pos,
+                        link_words=link_words_found,
+                        remaining_words=remaining_words,
+                        unused_clue_words=remaining_words  # Backward compatibility
                     )
 
         if debug and best_evidence:
@@ -497,7 +779,6 @@ class ComprehensiveWordplayDetector:
         elif debug:
             print(f"    NO EVIDENCE FOUND for {candidate}")
 
-        # Return best partial evidence found, if any
         return best_evidence
 
     def _matches_enumeration_pattern(self, candidate: str, enumeration: str) -> bool:
@@ -511,7 +792,6 @@ class ComprehensiveWordplayDetector:
             return True  # No enumeration constraint
 
         # Extract numbers from enumeration like "(5,3)" or "8"
-        import re
         numbers = re.findall(r'\d+', enumeration)
         if not numbers:
             return True  # No clear pattern to match
@@ -526,6 +806,36 @@ class ComprehensiveWordplayDetector:
         # Check if lengths match exactly
         return candidate_lengths == expected_lengths
 
+    def set_definition_words(self, evidence: AnagramEvidence,
+                             definition_words: List[str]) -> AnagramEvidence:
+        """
+        Set definition words from external pipeline data and recalculate remaining words.
+
+        The definition typically comes from the pipeline's window_support.
+        This method updates the evidence object with the definition and
+        removes definition words from remaining_words.
+
+        Args:
+            evidence: AnagramEvidence object to update
+            definition_words: List of words that form the definition
+
+        Returns:
+            Updated AnagramEvidence object
+        """
+        evidence.definition_words = definition_words
+
+        # Remove definition words from remaining_words
+        def_words_lower = set(w.lower() for w in definition_words)
+        evidence.remaining_words = [
+            w for w in evidence.remaining_words
+            if w.lower() not in def_words_lower
+        ]
+
+        # Also update deprecated field for backward compatibility
+        evidence.unused_clue_words = evidence.remaining_words
+
+        return evidence
+
     def analyze_clue_for_anagram_evidence(self, clue_text: str, candidates: List[str],
                                           enumeration: str = None, debug: bool = False) -> \
             List[AnagramEvidence]:
@@ -537,7 +847,9 @@ class ComprehensiveWordplayDetector:
         indicators = self.detect_wordplay_indicators(clue_text)
 
         if debug:
-            print(f"  DETECTED INDICATORS: {indicators}")
+            print(f"  DETECTED INDICATORS: {indicators['anagram']}")
+            for match in indicators.get('anagram_matches', []):
+                print(f"    Position {match.start_pos}: '{' '.join(match.words)}'")
 
         # If no anagram indicators, skip analysis
         if not indicators['anagram']:
@@ -625,3 +937,129 @@ class ComprehensiveWordplayDetector:
                 boost += explained_ratio * 5.0  # Up to 5 extra points
 
         return boost + word_count_bonus
+
+    def analyze_and_rank_anagram_candidates(self, clue_text: str, candidates: List[str],
+                                            answer: str, debug: bool = False) -> Dict[
+        str, any]:
+        """
+        ACTUAL WORKING LOGIC MOVED FROM evidence_analysis.py
+
+        Performs comprehensive anagram analysis and ranking for all candidates.
+        This is the proven working method that evidence_analysis.py was using directly.
+
+        Args:
+            clue_text: The cryptic clue text
+            candidates: List of all definition candidates to analyze
+            answer: The target answer for validation
+            debug: Enable debug output
+
+        Returns:
+            Dict containing complete ranked candidate information
+        """
+        if not candidates:
+            return {
+                "evidence_list": [],
+                "scored_candidates": [],
+                "answer_rank_original": None,
+                "answer_rank_evidence": None,
+                "ranking_improved": False,
+                "evidence_found": 0
+            }
+
+        # Use the working anagram system that evidence_analysis.py uses
+        # Lazy import to avoid circular dependency with anagram_stage.py
+        from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
+        enumeration_num = len(answer) if answer else 0
+
+        if debug:
+            print(f"DEBUG: Calling generate_anagram_hypotheses for '{clue_text[:50]}...'")
+            print(
+                f"DEBUG: enumeration_num={enumeration_num}, candidates_count={len(candidates)}")
+
+        hypotheses = generate_anagram_hypotheses(clue_text, enumeration_num, candidates)
+
+        if debug:
+            print(f"DEBUG: Got {len(hypotheses)} hypotheses")
+            if hypotheses:
+                print(f"DEBUG: First hypothesis: {hypotheses[0]}")
+
+        # Convert hypotheses to AnagramEvidence objects
+        evidence_list = []
+        for hyp in hypotheses:
+            # Convert confidence from string to float if needed
+            confidence_raw = hyp.get("confidence", 1.0)
+            if debug:
+                print(
+                    f"      DEBUG: Raw confidence: {confidence_raw} (type: {type(confidence_raw)})")
+
+            if isinstance(confidence_raw, str):
+                # Map string confidence to numeric values
+                confidence_map = {'provisional': 0.5, 'high': 0.9, 'medium': 0.7,
+                                  'low': 0.3}
+                confidence = confidence_map.get(confidence_raw.lower(), 0.5)
+                if debug:
+                    print(
+                        f"      DEBUG: Converted confidence '{confidence_raw}' to {confidence}")
+            else:
+                confidence = confidence_raw
+
+            # Create evidence object using the AnagramEvidence dataclass
+            evidence = AnagramEvidence(
+                candidate=hyp.get("answer", ""),
+                fodder_words=hyp.get("fodder_words", []),
+                fodder_letters=hyp.get("fodder_letters", ""),
+                evidence_type=hyp.get("evidence_type", hyp.get("solve_type", "exact")),
+                confidence=confidence,
+                excess_letters=hyp.get("excess_letters", ""),
+                needed_letters=hyp.get("needed_letters", ""),
+                unused_clue_words=hyp.get("unused_words", [])
+            )
+            evidence_list.append(evidence)
+
+        # Create scored candidates list - PRESERVES ALL RANKED CANDIDATE INFORMATION
+        scored_candidates = []
+        evidence_by_candidate = {ev.candidate.upper(): ev for ev in evidence_list}
+
+        for candidate in candidates:
+            candidate_upper = candidate.upper()
+            evidence = evidence_by_candidate.get(candidate_upper)
+
+            # Calculate evidence score boost using existing proven method
+            evidence_score = 0.0
+            if evidence:
+                evidence_score = self.calculate_anagram_score_boost(evidence)
+
+            scored_candidates.append({
+                "candidate": candidate,
+                "evidence_score": evidence_score,
+                "evidence": evidence,
+                "has_evidence": evidence is not None
+            })
+
+        # Sort by evidence score (highest first) - PRESERVES COMPLETE RANKING
+        scored_candidates.sort(key=lambda x: x["evidence_score"], reverse=True)
+
+        # Find answer ranking in scored list
+        answer_rank_evidence = None
+        for i, scored in enumerate(scored_candidates, 1):
+            if scored["candidate"].upper() == answer.upper():
+                answer_rank_evidence = i
+                break
+
+        # Find original answer ranking (unscored)
+        answer_rank_original = None
+        for i, candidate in enumerate(candidates, 1):
+            if candidate.upper() == answer.upper():
+                answer_rank_original = i
+                break
+
+        # Return complete ranked candidate information
+        return {
+            "evidence_list": evidence_list,
+            "scored_candidates": scored_candidates,  # COMPLETE RANKED LIST
+            "answer_rank_original": answer_rank_original,
+            "answer_rank_evidence": answer_rank_evidence,
+            "ranking_improved": (answer_rank_evidence and answer_rank_original and
+                                 answer_rank_evidence < answer_rank_original),
+            "evidence_found": len(evidence_list)
+        }

@@ -1,211 +1,216 @@
 #!/usr/bin/env python3
 """
-Explanation System Builder
-Builds systematic explanations for compound cryptic constructions using enhanced pipeline data.
+Compound Wordplay Analyzer Engine - CORRECTED VERSION
+
+This engine uses ranked candidates from evidence analysis instead of doing anagram detection.
+Receives evidence-enhanced cases and builds compound explanations from them.
 """
 
 import sys
 import os
-import json
 from typing import List, Dict, Any, Optional
 
 # Add project root to path
 sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
 
-from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
-from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
-
 
 class ExplanationSystemBuilder:
-    """Builds systematic explanations for cryptic constructions."""
+    """
+    Builds systematic explanations using ranked candidates from evidence analysis.
+    NO anagram detection - works with pre-ranked evidence results.
+    """
 
     def __init__(self):
-        """Initialize with evidence system detector for read-only operations."""
-        self.detector = ComprehensiveWordplayDetector()
+        """Initialize explanation builder - no anagram detection needed."""
+        pass
 
-    def extract_definition_window(self, case: Dict[str, Any]) -> Optional[str]:
-        """Extract definition window from pipeline case data."""
-        answer = case.get('answer', '').upper()
-        window_support = case.get('window_support', {})
-
-        # Find window that contains the correct answer
-        for window, candidates in window_support.items():
-            normalized_candidates = [c.upper().replace(' ', '') for c in candidates]
-            normalized_answer = answer.replace(' ', '')
-
-            if normalized_answer in normalized_candidates:
-                return window
-
-        return None
-
-    def detect_indicators_readonly(self, clue_text: str) -> Dict[str, List[str]]:
-        """Read-only call to evidence system for indicator detection."""
-        try:
-            return self.detector.detect_wordplay_indicators(clue_text)
-        except Exception as e:
-            print(f"Warning: Could not detect indicators for '{clue_text}': {e}")
-            return {'anagram': []}
-
-    def extract_anagram_data(self, case: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract anagram evidence data using the same working approach as evidence_analysis.py."""
-        clue_text = case.get('clue', '')
-        answer = case.get('answer', '')
-
-        # Get definition candidates - we need this for generate_anagram_hypotheses
-        # For compound analysis, we can use a simple list with just the answer
-        candidates = [answer] if answer else []
-
-        if not candidates:
-            return {}
-
-        # Use the SAME approach as evidence_analysis.py (which works perfectly)
-        enumeration_num = len(answer.replace(' ', '')) if answer else 0
-
-        # Call the working anagram function that evidence_analysis.py uses
-        hypotheses = generate_anagram_hypotheses(clue_text, enumeration_num, candidates)
-
-        if not hypotheses:
-            return {}
-
-        # Take the best (first) hypothesis - same as evidence_analysis.py approach
-        best_hypothesis = hypotheses[0]
-
-        # Convert hypothesis to the format expected by the rest of the system
-        return {
-            'candidate': best_hypothesis.get('answer', ''),
-            'fodder_words': best_hypothesis.get('fodder_words', []),
-            'fodder_letters': best_hypothesis.get('fodder_letters', ''),
-            'confidence': best_hypothesis.get('confidence', 0.5),
-            'evidence_type': best_hypothesis.get('evidence_type',
-                                                 best_hypothesis.get('solve_type',
-                                                                     'exact')),
-            'needed_letters': best_hypothesis.get('needed_letters', ''),
-            'excess_letters': best_hypothesis.get('excess_letters', '')
-        }
-
-    def build_word_attribution(self, case: Dict[str, Any]) -> Dict[str, Any]:
-        """Build complete word attribution from case data."""
-        clue_text = case.get('clue', '')
-        clue_words = clue_text.split()
-
-        # Extract core components
-        definition_window = self.extract_definition_window(case)
-        indicators = self.detect_indicators_readonly(clue_text)
-        anagram_data = self.extract_anagram_data(case)
-
-        # Build accounted words set
-        accounted_words = set()
-
-        # Add definition window words
-        if definition_window:
-            # Clean and add definition words
-            def_words = [w.strip('.,!?:;()') for w in definition_window.split()]
-            accounted_words.update(def_words)
-
-        # Add anagram fodder words
-        fodder_words = anagram_data.get('fodder_words', [])
-        accounted_words.update(fodder_words)
-
-        # Add anagram indicators
-        anagram_indicators = indicators.get('anagram', [])
-        accounted_words.update(anagram_indicators)
-
-        # Add common link words that might connect components
-        link_words = {'in', 'with', 'of', 'to', 'for', 'by', 'from', 'and', 'but', 'the',
-                      'a'}
-        for word in clue_words:
-            clean_word = word.strip('.,!?:;()').lower()
-            if clean_word in link_words:
-                accounted_words.add(clean_word)
-
-        # Calculate remaining words
-        remaining_words = []
-        for word in clue_words:
-            clean_word = word.strip('.,!?:;()')
-            if clean_word.lower() not in [w.lower() for w in accounted_words]:
-                # Skip enumeration patterns like (6,3)
-                if not (clean_word.startswith('(') and clean_word.endswith(')')):
-                    remaining_words.append(clean_word)
-
-        return {
-            'clue': clue_text,
-            'answer': case.get('answer_raw', ''),
-            'definition_window': definition_window,
-            'anagram_indicators': anagram_indicators,
-            'anagram_data': anagram_data,
-            'accounted_words': list(accounted_words),
-            'remaining_words': remaining_words,
-            'enumeration': case.get('enumeration', ''),
-            # Preserve original case data
-            'original_case': case
-        }
-
-    def enhance_pipeline_data(self, raw_pipeline_results: List[Dict[str, Any]]) -> List[
-        Dict[str, Any]]:
+    def enhance_pipeline_data(self, evidence_enhanced_cases: List[Dict[str, Any]]) -> \
+    List[Dict[str, Any]]:
         """
-        Extract complete word attribution from pipeline simulator results.
-        Adds definition windows, indicators, and proper remaining words calculation.
+        Enhance cases with complete word attribution using evidence analysis results.
+        NO anagram detection - uses ranked candidates already provided.
         """
         enhanced_cases = []
 
         print("Enhancing pipeline data with complete word attribution...")
 
-        for i, case in enumerate(raw_pipeline_results):
-            # Only process cases with anagram hits
-            if case.get('anagrams') and len(case['anagrams']) > 0:
-                try:
-                    enhanced_case = self.build_word_attribution(case)
-                    enhanced_cases.append(enhanced_case)
+        for i, case in enumerate(evidence_enhanced_cases):
+            if (i + 1) % 100 == 0:
+                print(f"  Processed {i + 1} cases...")
 
-                    if (i + 1) % 100 == 0:
-                        print(f"  Processed {i + 1} cases...")
-
-                except Exception as e:
-                    print(f"Warning: Could not enhance case {i + 1}: {e}")
-                    continue
+            try:
+                enhanced_case = self.build_complete_attribution(case)
+                enhanced_cases.append(enhanced_case)
+            except Exception as e:
+                print(f"Warning: Could not enhance case {i + 1}: {e}")
+                continue
 
         print(f"Enhanced {len(enhanced_cases)} cases with complete attribution.")
         return enhanced_cases
 
-    def analyze_case_quality(self, enhanced_case: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze the quality of a case for explanation system development."""
-        anagram_data = enhanced_case.get('anagram_data', {})
-        fodder_letters = anagram_data.get('fodder_letters', '')
-        answer = enhanced_case.get('answer', '')
+    def build_complete_attribution(self, case: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Build complete word attribution using evidence analysis results.
+        Uses top ranked candidate from evidence analysis - no detection needed.
+        """
+        clue_text = case.get('clue', '')
+        clue_words = clue_text.split()
+        answer = case.get('answer', '')
+
+        # Extract evidence analysis results (already ranked by evidence analysis)
+        evidence_analysis = case.get('evidence_analysis', {})
+        scored_candidates = evidence_analysis.get('scored_candidates', [])
+
+        if not scored_candidates:
+            # Fallback for cases without evidence analysis
+            return self.build_fallback_attribution(case, clue_words)
+
+        # Use the top ranked candidate from evidence analysis (rank #1)
+        top_candidate = scored_candidates[0]
+        evidence = top_candidate.get('evidence')
+
+        if not evidence:
+            return self.build_fallback_attribution(case, clue_words)
+
+        # Extract components from ranked evidence (no detection needed)
+        candidate_word = evidence.candidate
+        fodder_words = evidence.fodder_words or []
+        evidence_type = evidence.evidence_type
+
+        # Account for words used in the anagram component
+        accounted_words = set()
+
+        # Add anagram fodder words to accounted words
+        for fodder_word in fodder_words:
+            # Find this word in the clue (case insensitive matching)
+            for clue_word in clue_words:
+                if clue_word.lower() == fodder_word.lower():
+                    accounted_words.add(clue_word)
+
+        # Simple definition detection (uses pipeline data when available)
+        definition_window = self.detect_definition_window(case, clue_words,
+                                                          candidate_word)
+        if definition_window:
+            def_words = definition_window.split()
+            for def_word in def_words:
+                if def_word in clue_words:
+                    accounted_words.add(def_word)
+
+        # Add common link words to accounted
+        link_words = {'of', 'in', 'the', 'a', 'an', 'to', 'for', 'with', 'and', 'or'}
+        for word in clue_words:
+            if word.lower() in link_words:
+                accounted_words.add(word)
+
+        # Find remaining words for compound analysis
+        remaining_words = [w for w in clue_words if w not in accounted_words]
+
+        # Build enhanced case with attribution
+        enhanced_case = case.copy()
+        enhanced_case.update({
+            'anagram_data': {
+                'candidate': candidate_word,
+                'fodder_words': fodder_words,
+                'evidence_type': evidence_type,
+                'confidence': evidence.confidence,
+                'fodder_letters': evidence.fodder_letters  # For display compatibility
+            },
+            'definition_window': definition_window or "None identified",
+            'anagram_indicators': self.extract_indicators_from_evidence(evidence),
+            'accounted_words': list(accounted_words),
+            'remaining_words': remaining_words
+        })
+
+        return enhanced_case
+
+    def build_fallback_attribution(self, case: Dict[str, Any], clue_words: List[str]) -> \
+    Dict[str, Any]:
+        """Fallback attribution when no evidence analysis available."""
+        enhanced_case = case.copy()
+        enhanced_case.update({
+            'anagram_data': {
+                'candidate': case.get('answer', ''),
+                'fodder_words': [],
+                'evidence_type': 'unknown',
+                'confidence': 0.0,
+                'fodder_letters': ''
+            },
+            'definition_window': "None identified",
+            'anagram_indicators': [],
+            'accounted_words': [],
+            'remaining_words': clue_words
+        })
+        return enhanced_case
+
+    def detect_definition_window(self, case: Dict[str, Any], clue_words: List[str],
+                                 candidate_word: str) -> Optional[str]:
+        """
+        Simple definition detection using pipeline data when available.
+        Can be improved with proper definition detection.
+        """
+        # Try to use window_support from pipeline if available
+        window_support = case.get('window_support', {})
+        if window_support:
+            answer = case.get('answer', '').upper()
+            for window_text, candidates in window_support.items():
+                if isinstance(candidates, list):
+                    normalized_candidates = [c.upper().replace(' ', '') for c in
+                                             candidates]
+                    normalized_answer = answer.replace(' ', '')
+                    if normalized_answer in normalized_candidates:
+                        return window_text
+
+        # Fallback: simple heuristic (take last 1-2 words)
+        if len(clue_words) >= 2:
+            potential_def = ' '.join(clue_words[-2:])
+            return potential_def
+        elif len(clue_words) >= 1:
+            return clue_words[-1]
+
+        return None
+
+    def extract_indicators_from_evidence(self, evidence) -> List[str]:
+        """Extract indicator information from evidence if available."""
+        # This would be enhanced to extract actual indicators
+        # For now, return empty list as indicators aren't critical for compound analysis
+        return []
+
+    def analyze_case_quality(self, case: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze the quality of a compound candidate."""
+        anagram_data = case.get('anagram_data', {})
+        remaining_words = case.get('remaining_words', [])
+
+        # Quality based on confidence and remaining word count
         confidence = anagram_data.get('confidence', 0.0)
-        remaining_words = enhanced_case.get('remaining_words', [])
+        num_remaining = len(remaining_words)
 
-        # Handle string confidence values (like 'provisional')
+        # Convert string confidence to numeric
         if isinstance(confidence, str):
-            confidence = 0.5  # Default numeric value for string confidences
+            confidence_map = {'high': 0.9, 'medium': 0.7, 'provisional': 0.5, 'low': 0.3}
+            confidence = confidence_map.get(confidence.lower(), 0.5)
 
-        # Calculate fodder coverage
-        fodder_coverage = len(fodder_letters) / len(answer) if answer else 0.0
-
-        # Classify quality
-        if fodder_coverage >= 0.8 and confidence >= 0.7:
+        # Quality scoring based on confidence and remaining words
+        if confidence >= 0.7 and num_remaining >= 2:
             quality = "high"
-        elif fodder_coverage >= 0.6 and confidence >= 0.5:
+        elif confidence >= 0.5 and num_remaining >= 1:
             quality = "medium"
         else:
             quality = "low"
 
         return {
             'quality': quality,
-            'fodder_coverage': fodder_coverage,
             'confidence': confidence,
-            'has_remaining_words': len(remaining_words) > 0,
-            'remaining_word_count': len(remaining_words)
+            'remaining_word_count': num_remaining
         }
 
     def build_explanations(self, enhanced_cases: List[Dict[str, Any]]) -> List[
         Dict[str, Any]]:
         """
-        Main explanation building logic using complete attribution data.
+        Build systematic explanations using complete attribution data.
         """
         explanations = []
 
-        print("\nBuilding systematic explanations...")
+        print("Building systematic explanations...")
 
         for case in enhanced_cases:
             quality_analysis = self.analyze_case_quality(case)
@@ -221,7 +226,9 @@ class ExplanationSystemBuilder:
                 'anagram_component': {
                     'indicator': case['anagram_indicators'],
                     'fodder': case['anagram_data'].get('fodder_words', []),
-                    'letters_provided': case['anagram_data'].get('fodder_letters', ''),
+                    'letters_provided': case['anagram_data'].get('candidate',
+                                                                 case['answer']),
+                    # Show final answer
                     'confidence': case['anagram_data'].get('confidence', 0.0)
                 },
                 'remaining_analysis': {
@@ -263,43 +270,4 @@ class ExplanationSystemBuilder:
             elif word_lower in ['around', 'about', 'circling']:
                 suggestions.append('container')
 
-        return suggestions
-
-    def filter_by_quality(self, explanations: List[Dict[str, Any]],
-                          min_quality: str = 'medium') -> List[Dict[str, Any]]:
-        """Filter explanations by quality level."""
-        quality_order = {'low': 0, 'medium': 1, 'high': 2}
-        min_level = quality_order.get(min_quality, 1)
-
-        return [exp for exp in explanations
-                if quality_order.get(exp['quality'], 0) >= min_level]
-
-    def export_explanations(self, explanations: List[Dict[str, Any]],
-                            filepath: str = None) -> None:
-        """Export explanations to JSON file."""
-        if not filepath:
-            filepath = 'explanation_results.json'
-
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(explanations, f, indent=2, ensure_ascii=False)
-
-        print(f"Exported {len(explanations)} explanations to {filepath}")
-
-
-def main():
-    """Main execution function."""
-    print("=== EXPLANATION SYSTEM BUILDER ===")
-
-    # Initialize explanation system
-    builder = ExplanationSystemBuilder()
-
-    # TODO: Load pipeline results
-    # For now, return placeholder
-    print("Ready to process pipeline simulator results.")
-    print("Next step: Load pipeline data and call enhance_pipeline_data()")
-
-    return builder
-
-
-if __name__ == "__main__":
-    builder = main()
+        return list(set(suggestions))  # Remove duplicates

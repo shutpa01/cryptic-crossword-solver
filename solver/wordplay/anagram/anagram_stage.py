@@ -18,7 +18,8 @@ try:
 
 
     EVIDENCE_SYSTEM_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"IMPORT FAILED: {e}")
     EVIDENCE_SYSTEM_AVAILABLE = False
 
 
@@ -32,7 +33,10 @@ def generate_anagram_hypotheses(clue_text, enumeration, candidates):
 
     # STEP 1: Run original logic (exactly as before)
     original_hypotheses = _generate_anagram_hypotheses_original(clue_text, enumeration,
-                                                                candidates)
+                                                          candidates)
+    #print(
+        #f"BRUTE: {len(original_hypotheses)}, EVIDENCE_AVAIL:
+    # {EVIDENCE_SYSTEM_AVAILABLE}")
 
     # STEP 2: If original found hits, return them (preserves existing behavior)
     if original_hypotheses:
@@ -45,7 +49,8 @@ def generate_anagram_hypotheses(clue_text, enumeration, candidates):
                                                                         enumeration,
                                                                         candidates)
             return evidence_hypotheses
-        except Exception:
+        except Exception as e:
+            print(f"EVIDENCE SYSTEM ERROR: {e}")
             # Silent fallback - don't break existing functionality
             pass
 

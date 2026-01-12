@@ -23,6 +23,10 @@ sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
 from pipeline_simulator import run_pipeline_probe, MAX_CLUES, WORDPLAY_TYPE
 from solver.wordplay.anagram.compound_wordplay_analyzer import ExplanationSystemBuilder
 
+# Import EvidenceAnalyzer to apply evidence ranking to compound candidates
+sys.path.append(os.path.join(os.path.dirname(__file__)))
+from evidence_analysis import EvidenceAnalyzer
+
 
 class CompoundAnalyzer:
     """Analyzes compound wordplay opportunities using proper word attribution."""
@@ -63,13 +67,9 @@ class CompoundAnalyzer:
 
     def analyze_compound_cohort(self, results):
         """
-        Analyze compound candidates using ExplanationSystemBuilder workflow.
-        Returns enhanced results with proper word attribution analysis.
+        Analyze compound candidates using evidence-ranked results.
+        UPDATED: Now works with evidence-analyzed results instead of raw pipeline data.
         """
-        if not self.explanation_builder:
-            print("\nCompound analysis disabled - explanation builder not available.")
-            return []
-
         compound_candidates = [r for r in results if self.is_compound_candidate(r)]
 
         print(f"\n🧩 COMPOUND WORDPLAY COHORT ANALYSIS:")
@@ -81,21 +81,46 @@ class CompoundAnalyzer:
             print("No compound candidates found.")
             return []
 
-        # Use ExplanationSystemBuilder workflow
-        try:
-            # Step 1: Enhance pipeline data with proper word attribution
-            enhanced_cases = self.explanation_builder.enhance_pipeline_data(
-                compound_candidates)
+        # Apply evidence analysis to get ranked candidates for each clue
+        evidence_analyzer = EvidenceAnalyzer()
+        evidence_enhanced_results = []
 
-            # Step 2: Build systematic explanations
+        print("Applying evidence analysis to compound candidates...")
+        for i, record in enumerate(compound_candidates):
+            try:
+                # Apply evidence analysis to get complete ranked candidate information
+                enhanced_record = evidence_analyzer.apply_evidence_scoring(record,
+                                                                           debug=False)
+                evidence_enhanced_results.append(enhanced_record)
+
+                if (i + 1) % 500 == 0:
+                    print(f"  Processed {i + 1} compound candidates...")
+
+            except Exception as e:
+                print(f"Warning: Could not analyze compound candidate {i + 1}: {e}")
+                continue
+
+        # Now work with evidence-enhanced results for compound analysis
+        if not self.explanation_builder:
+            print("\nCompound analysis disabled - explanation builder not available.")
+            return []
+
+        # Use ExplanationSystemBuilder with evidence-enhanced data
+        try:
+            # Step 1: Apply enhance_pipeline_data to add definition windows and word attribution
+            enhanced_cases = self.explanation_builder.enhance_pipeline_data(
+                evidence_enhanced_results)
+
+            # Step 2: Build systematic explanations from enhanced cases
             explanations = self.explanation_builder.build_explanations(enhanced_cases)
 
             # Step 3: Filter for cases with meaningful remaining words
             compound_explanations = [exp for exp in explanations
-                                     if exp['remaining_analysis'][
-                                         'needs_additional_wordplay']]
+                                     if exp.get('remaining_analysis', {}).get(
+                    'needs_additional_wordplay', False)]
 
-            print(f"Cases with proper word attribution: {len(enhanced_cases)}")
+            print(f"Cases with evidence analysis: {len(evidence_enhanced_results)}")
+            print(f"Cases with enhanced attribution: {len(enhanced_cases)}")
             print(f"Cases needing additional wordplay: {len(compound_explanations)}")
 
             return compound_explanations
@@ -103,6 +128,98 @@ class CompoundAnalyzer:
         except Exception as e:
             print(f"Error in compound analysis: {e}")
             return []
+
+    def build_compound_analysis(self, record):
+        """Build compound analysis using existing ranked anagram hits."""
+        clue_text = record.get('clue', '')
+        answer = record.get('answer', '')
+        anagram_hits = record.get('anagrams', [])
+
+        if not anagram_hits:
+            return None
+
+        # Use the BEST (first) anagram hit - this is already ranked by pipeline
+        best_hit = anagram_hits[0]
+
+        # Extract components from ranked hit
+        fodder_words = best_hit.get('fodder_words', [])
+        fodder_letters = best_hit.get('fodder_letters', '')
+        unused_words = best_hit.get('unused_words', [])
+        confidence = best_hit.get('confidence', 0.5)
+
+        # Convert string confidence to numeric
+        if isinstance(confidence, str):
+            confidence_map = {'provisional': 0.5, 'high': 0.9, 'medium': 0.7, 'low': 0.3}
+            confidence = confidence_map.get(confidence.lower(), 0.5)
+
+        # Filter meaningful unused words
+        meaningful_unused = [w for w in unused_words
+                             if len(w) > 2 and not w.replace(',', '').replace('-',
+                                                                              '').isdigit()]
+
+        # Determine quality based on coverage
+        letter_coverage = len(fodder_letters) / len(
+            answer.replace(' ', '')) if answer else 0.0
+
+        if letter_coverage >= 0.8 and confidence >= 0.7:
+            quality = "high"
+        elif letter_coverage >= 0.6 and confidence >= 0.5:
+            quality = "medium"
+        else:
+            quality = "low"
+
+        # Build explanation structure
+        explanation = {
+            'clue': clue_text,
+            'answer': answer,
+            'quality': quality,
+            'definition_component': {
+                'text': 'Auto-detected',  # Simplified for now
+                'contributes_to': answer
+            },
+            'anagram_component': {
+                'indicator': [],  # Simplified for now
+                'fodder': fodder_words,
+                'letters_provided': fodder_letters,
+                'confidence': confidence
+            },
+            'remaining_analysis': {
+                'words': meaningful_unused,
+                'needs_additional_wordplay': len(meaningful_unused) > 0,
+                'suggested_types': self.suggest_wordplay_types(meaningful_unused)
+            },
+            'word_attribution': {
+                'accounted_for': fodder_words,
+                'remaining': meaningful_unused
+            }
+        }
+
+        return explanation
+
+    def suggest_wordplay_types(self, remaining_words):
+        """Suggest likely wordplay types for remaining words."""
+        suggestions = []
+
+        for word in remaining_words:
+            word_lower = word.lower()
+
+            # Common substitution candidates
+            substitution_words = {
+                'husband': 'H', 'wife': 'W', 'married': 'M', 'single': 'S',
+                'right': 'R', 'left': 'L', 'king': 'K', 'queen': 'Q',
+                'north': 'N', 'south': 'S', 'east': 'E', 'west': 'W'
+            }
+
+            if word_lower in substitution_words:
+                suggestions.append('substitution')
+            elif word_lower in ['back', 'backwards', 'reverse', 'reversed']:
+                suggestions.append('reversal')
+            elif word_lower in ['inside', 'in', 'within', 'containing']:
+                suggestions.append('container')
+            elif word_lower in ['around', 'about', 'circling']:
+                suggestions.append('container')
+
+        return list(set(suggestions))  # Remove duplicates
 
 
 def display_compound_results(compound_results, max_display=10):
