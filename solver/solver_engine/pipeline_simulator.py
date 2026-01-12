@@ -42,7 +42,7 @@ MAX_CLUES = 1000
 WORDPLAY_TYPE = "anagram"  # e.g. "all", "anagram", "lurker", "dd"
 ONLY_MISSING_DEFINITION = False  # show only clues where answer NOT in def candidates
 MAX_DISPLAY = 10  # max number of clues to print
-SINGLE_CLUE_MATCH = ""  # normalised substring
+SINGLE_CLUE_MATCH = "Lacrosse quartet playing a short distance away"  # normalised substring
 # match on clue_text (highest priority)
 
 # NEW: Forwarded cohort analysis settings

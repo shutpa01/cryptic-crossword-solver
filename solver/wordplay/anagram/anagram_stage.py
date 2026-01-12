@@ -1,5 +1,6 @@
 from itertools import combinations
 from collections import Counter
+import re
 
 from solver.solver_engine.resources import norm_letters
 
@@ -18,9 +19,21 @@ try:
 
 
     EVIDENCE_SYSTEM_AVAILABLE = True
-except ImportError as e:
-    print(f"IMPORT FAILED: {e}")
+except ImportError:
     EVIDENCE_SYSTEM_AVAILABLE = False
+
+
+def _normalize_enumeration(enumeration):
+    """
+    Normalize enumeration to integer letter count.
+    "(2,5,8)" → 15, "(7)" → 7, "8" → 8, 8 → 8
+    """
+    if isinstance(enumeration, int):
+        return enumeration
+    if isinstance(enumeration, str):
+        digits = re.findall(r'\d+', enumeration)
+        return sum(int(d) for d in digits) if digits else 0
+    return 0
 
 
 def generate_anagram_hypotheses(clue_text, enumeration, candidates):
@@ -30,6 +43,9 @@ def generate_anagram_hypotheses(clue_text, enumeration, candidates):
     2. For unresolved cases, try evidence system
     3. Return combined results
     """
+
+    # Normalize enumeration: "(2,5,8)" → 15
+    enumeration = _normalize_enumeration(enumeration)
 
     # STEP 1: Run original logic (exactly as before)
     original_hypotheses = _generate_anagram_hypotheses_original(clue_text, enumeration,
@@ -181,7 +197,12 @@ def _generate_anagram_hypotheses_evidence(clue_text, enumeration, candidates):
             "evidence_type": evidence.evidence_type,
             "score_boost": detector.calculate_anagram_score_boost(evidence),
             "needed_letters": getattr(evidence, 'needed_letters', ''),
-            "excess_letters": getattr(evidence, 'excess_letters', '')
+            "excess_letters": getattr(evidence, 'excess_letters', ''),
+            # Indicator and attribution data for compound analysis
+            "indicator_words": getattr(evidence, 'indicator_words', []),
+            "indicator_position": getattr(evidence, 'indicator_position', -1),
+            "link_words": getattr(evidence, 'link_words', []),
+            "remaining_words": getattr(evidence, 'remaining_words', [])
         }
 
         hypotheses.append(hypothesis)
