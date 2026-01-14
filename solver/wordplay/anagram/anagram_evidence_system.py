@@ -28,8 +28,7 @@ import sys
 import os
 
 sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
-# NOTE: generate_anagram_hypotheses imported lazily in analyze_and_rank_anagram_candidates
-# to avoid circular import with anagram_stage.py
+from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
 
 
 @dataclass
@@ -86,8 +85,33 @@ class ContiguousFodder:
 
 
 # Link words that can appear between indicator and fodder
-LINK_WORDS = {'to', 'of', 'in', 'for', 'with', 'by', 'from', 'a', 'an', 'the',
-              'and', 'is', 'are', 'needs', 'about', 'on', 'after'}
+LINK_WORDS = {
+    # Articles and prepositions
+    'to', 'of', 'in', 'for', 'with', 'by', 'from', 'a', 'an', 'the',
+    'and', 'is', 'are', 'needs', 'about', 'on', 'after', 'at', 'as', 'or',
+    # Common verbs
+    'be', 'being', 'been', 'has', 'have', 'had', 'having',
+    'was', 'were', 'will', 'would', 'could', 'should', 'must', 'may', 'might',
+    'gets', 'get', 'getting', 'got', 'makes', 'make', 'making', 'made',
+    'gives', 'give', 'given', 'giving', 'sees', 'see', 'seen', 'seeing',
+    # Contractions (with apostrophe)
+    "it's", "that's", "there's", "here's", "what's",
+    # Contractions (apostrophe-stripped)
+    'its', 'thats', 'theres', 'heres', 'whats', 'im', 'ive', 'id',
+    'youre', 'youve', 'youd', 'hes', 'shes', 'theyre', 'theyve',
+    'dont', 'doesnt', 'didnt', 'wont', 'wouldnt', 'cant', 'couldnt',
+    # Conjunctions and connectors
+    'but', 'that', 'which', 'when', 'where', 'while', 'so', 'yet',
+    # Other common links
+    'this', 'these', 'those', 'such', 'one', 'ones', 'some', 'any', 'all',
+    'here', 'there', 'into', 'onto', 'within', 'without',
+    'find', 'found', 'finding', 'show', 'showing', 'put', 'set',
+    'if', 'how', 'why', 'who', 'whom', 'you',
+}
+
+# Link words that can appear BETWEEN fodder words without breaking contiguity
+# These are words that setters commonly use to join fodder: "birds WITH ale", "cats AND dogs"
+TRANSPARENT_LINK_WORDS = {'with', 'and', 'or'}
 
 
 class ComprehensiveWordplayDetector:
@@ -451,20 +475,37 @@ class ComprehensiveWordplayDetector:
         current_words = []
         current_positions = []
         pos = start_pos
+        skipped_transparent_link = False  # Only allow skipping ONE transparent link word
 
         while 0 <= pos < n:
             token = tokens[pos]
+            token_lower = token.lower()
 
             # Stop if we hit an indicator word
-            if token.lower() in self.anagram_indicators_single:
+            if token_lower in self.anagram_indicators_single:
                 break
 
-            # Stop if we hit a link word after fodder has started
-            if token.lower() in LINK_WORDS and current_words:
+            # Handle link words after fodder has started
+            if token_lower in LINK_WORDS and current_words:
+                # For transparent link words (with, and, or), peek ahead to see if more fodder exists
+                # But only skip ONE transparent link word per expansion
+                if token_lower in TRANSPARENT_LINK_WORDS and not skipped_transparent_link:
+                    peek_pos = pos + step
+                    # Check if there's a non-link word ahead (potential fodder)
+                    if 0 <= peek_pos < n:
+                        peek_token = tokens[peek_pos].lower()
+                        # If next word is NOT a link word and NOT an indicator, skip this link word
+                        if (peek_token not in LINK_WORDS and
+                            peek_token not in self.anagram_indicators_single):
+                            # Skip the transparent link word, continue to next
+                            skipped_transparent_link = True  # Mark that we've used our one skip
+                            pos += step
+                            continue
+                # Stop for non-transparent link words, if already skipped one, or if no fodder ahead
                 break
 
-            # Skip link words at the start
-            if token.lower() in LINK_WORDS and not current_words:
+            # Skip link words at the start (these don't count against our one-skip limit)
+            if token_lower in LINK_WORDS and not current_words:
                 pos += step
                 continue
 
@@ -967,8 +1008,6 @@ class ComprehensiveWordplayDetector:
             }
 
         # Use the working anagram system that evidence_analysis.py uses
-        # Lazy import to avoid circular dependency with anagram_stage.py
-        from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
         enumeration_num = len(answer) if answer else 0
 
         if debug:

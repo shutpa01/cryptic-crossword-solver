@@ -324,15 +324,33 @@ class CompoundWordplayAnalyzer:
             'gives', 'give', 'given', 'giving',
             'sees', 'see', 'seen', 'seeing',
             'brings', 'bring', 'bringing', 'brought',
-            # Contractions
+            # Contractions (with apostrophe)
             "it's", "that's", "there's", "here's", "what's",
+            "i'm", "i've", "i'd", "you're", "you've", "you'd",
+            "he's", "she's", "we're", "we've", "they're", "they've",
+            "don't", "doesn't", "didn't", "won't", "wouldn't",
+            "can't", "couldn't", "shouldn't", "isn't", "aren't",
+            # Contractions (apostrophe-stripped - for norm_letters matching)
+            'its', 'thats', 'theres', 'heres', 'whats',
+            'im', 'ive', 'id', 'youre', 'youve', 'youd',
+            'hes', 'shes', 'were', 'weve', 'theyre', 'theyve',
+            'dont', 'doesnt', 'didnt', 'wont', 'wouldnt',
+            'cant', 'couldnt', 'shouldnt', 'isnt', 'arent',
             # Conjunctions and connectors
             'but', 'that', 'which', 'when', 'where', 'while',
             'so', 'yet', 'thus', 'hence', 'therefore',
             # Other common links
             'this', 'these', 'those', 'such',
             'one', 'ones', 'some', 'any', 'all',
-            'here', 'there', 'perhaps', 'maybe',
+            'here', 'there', 'maybe',
+            # Common link phrases often appearing
+            'into', 'onto', 'within', 'without',
+            'find', 'found', 'finding', 'show', 'showing',
+            'put', 'set', 'provide', 'providing',
+            'if', 'how', 'why', 'who', 'whom',
+            # Words that connect fodder to definition
+            'giving', 'producing', 'causing', 'creating',
+            'offering', 'providing', 'yielding', 'making',
         }
 
         # Positional indicators that show construction order
@@ -397,8 +415,17 @@ class CompoundWordplayAnalyzer:
         # Extract anagram component
         fodder_words = evidence.fodder_words or []
         fodder_letters = evidence.fodder_letters or ''
-        anagram_indicator = self._find_anagram_indicator(clue_words, fodder_words,
-                                                         definition_window)
+
+        # First try to get indicator from evidence (already found by evidence system)
+        anagram_indicator = None
+        if hasattr(evidence, 'indicator_words') and evidence.indicator_words:
+            # Evidence system already found the indicator
+            anagram_indicator = ' '.join(evidence.indicator_words)
+
+        # Fallback: search for indicator ourselves
+        if not anagram_indicator:
+            anagram_indicator = self._find_anagram_indicator(clue_words, fodder_words,
+                                                             definition_window)
 
         # Build word roles tracking
         word_roles = []
@@ -518,6 +545,8 @@ class CompoundWordplayAnalyzer:
             if norm_letters(word) in fodder_lower:
                 continue
             indicator_match = self.db.lookup_indicator(word)
+            # DEBUG: uncomment to trace indicator lookup
+            # print(f"  [DEBUG] Checking '{word}' -> {indicator_match}")
             if indicator_match and indicator_match.wordplay_type == 'anagram':
                 return word
 
