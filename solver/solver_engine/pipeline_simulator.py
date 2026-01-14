@@ -5,6 +5,7 @@
 # - preserves evidence
 # - optional wordplay_type filter
 # - ENHANCED: Now includes forwarded anagram cohort analysis
+# - ENHANCED: Now persists stage data to SQLite for debugging
 
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from solver.solver_engine.resources import (
     parse_enum,
     norm_letters,
     clean_key,
+    matches_enumeration,
 )
 
 from solver.definition.definition_engine_edges import definition_candidates
@@ -34,6 +36,15 @@ try:
 except ImportError:
     EVIDENCE_SYSTEM_AVAILABLE = False
 
+# Pipeline Persistence Integration
+try:
+    from data.pipeline_persistence import start_run, save_stage
+
+    PERSISTENCE_AVAILABLE = True
+except ImportError:
+    PERSISTENCE_AVAILABLE = False
+    print("WARNING: Pipeline persistence not available - stage data will not be saved")
+
 # ==============================
 # SIMULATOR CONFIGURATION
 # ==============================
@@ -42,8 +53,7 @@ MAX_CLUES = 1000
 WORDPLAY_TYPE = "anagram"  # e.g. "all", "anagram", "lurker", "dd"
 ONLY_MISSING_DEFINITION = False  # show only clues where answer NOT in def candidates
 MAX_DISPLAY = 10  # max number of clues to print
-SINGLE_CLUE_MATCH = "Lacrosse quartet playing a short distance away"  # normalised substring
-# match on clue_text (highest priority)
+SINGLE_CLUE_MATCH = ""  # normalised substring match on clue_text (highest priority)
 
 # NEW: Forwarded cohort analysis settings
 ANALYZE_FORWARDED_ANAGRAMS = False  # Disable for explanation system development - focus on successes
@@ -52,6 +62,9 @@ MAX_FORWARDED_SAMPLES = 25  # Max forwarded samples to show
 # NEW: Successful anagram analysis for explanation system development
 ANALYZE_SUCCESSFUL_ANAGRAMS = True  # Enable successful anagram analysis
 MAX_SUCCESSFUL_SAMPLES = 25  # Max successful samples to show
+
+# NEW: Persistence settings
+ENABLE_PERSISTENCE = True  # Set to False to disable stage persistence
 
 _ENUM_RE = re.compile(r"\(\d+(?:,\d+)*\)")
 
@@ -84,8 +97,40 @@ def _clean_window(w: str) -> str:
     return " ".join(w.split())
 
 
-def _length_filter(cands: List[str], total_len: int) -> List[str]:
-    return [c for c in cands if len(norm_letters(c)) == total_len]
+def _length_filter(cands: List[str], enumeration: str) -> List[str]:
+    """
+    Filter candidates by enumeration.
+    For single-word enumerations (7): check total letter count
+    For multi-word enumerations (6,3,5): require word pattern to match
+    """
+    total_len = parse_enum(enumeration)
+    parts = re.findall(r'\d+', enumeration or "")
+    is_multi_word = len(parts) > 1
+    pattern = [int(p) for p in parts]
+
+    result = []
+    for c in cands:
+        # First check: total letter count must match
+        if len(norm_letters(c)) != total_len:
+            continue
+
+        # For multi-word enumerations, check word pattern
+        if is_multi_word:
+            # Split candidate into words
+            words = c.split()
+
+            if len(words) == len(pattern):
+                # Check each word length matches pattern
+                word_lengths = [len(norm_letters(w)) for w in words]
+                if word_lengths == pattern:
+                    result.append(c)
+            # Single-word candidates rejected for multi-word enumerations
+            # (AUTHORITY rejected for (2,4,3) even though it's 9 letters)
+        else:
+            # Single-word enumeration: just total length check
+            result.append(c)
+
+    return result
 
 
 def _analyze_forwarded_anagram(clue_text: str, answer: str, candidates: List[str],
@@ -220,6 +265,11 @@ def run_pipeline_probe(
 ) -> List[Dict[str, Any]]:
     wp_filter = wordplay_type.lower()
 
+    # ---- START PERSISTENCE RUN ----
+    run_id = None
+    if PERSISTENCE_AVAILABLE and ENABLE_PERSISTENCE:
+        run_id = start_run()
+
     conn = connect_db()
     cur = conn.cursor()
     graph = load_graph(conn)
@@ -230,18 +280,18 @@ def run_pipeline_probe(
     if SINGLE_CLUE_MATCH:
         cur.execute(
             """
-            SELECT clue_text, enumeration, answer, wordplay_type
+            SELECT id, clue_text, enumeration, answer, wordplay_type, source, puzzle_number
             FROM clues
             """
         )
         rows = [
             r for r in cur.fetchall()
-            if _match_single_clue(SINGLE_CLUE_MATCH, r[0])
+            if _match_single_clue(SINGLE_CLUE_MATCH, r[1])
         ]
     elif wp_filter == "all":
         cur.execute(
             """
-            SELECT clue_text, enumeration, answer, wordplay_type
+            SELECT id, clue_text, enumeration, answer, wordplay_type, source, puzzle_number
             FROM clues
             ORDER BY RANDOM()
             LIMIT ?
@@ -252,7 +302,7 @@ def run_pipeline_probe(
     else:
         cur.execute(
             """
-            SELECT clue_text, enumeration, answer, wordplay_type
+            SELECT id, clue_text, enumeration, answer, wordplay_type, source, puzzle_number
             FROM clues
             WHERE LOWER(wordplay_type) = ?
             ORDER BY RANDOM()
@@ -276,6 +326,7 @@ def run_pipeline_probe(
         "clues_with_anagram": 0,
         "clues_with_lurker": 0,
         "clues_with_dd": 0,
+        "gate_failed": 0,  # NEW: Clues filtered by definition gate
         # NEW: Forwarded analysis stats
         "forwarded_anagrams": 0,
         "forwarded_no_indicators": 0,
@@ -288,11 +339,33 @@ def run_pipeline_probe(
         "successful_deletion": 0,
     }
 
-    for clue, enum, answer_raw, wp_type in rows:
+    # ---- SAVE INPUT STAGE ----
+    input_records = []
+    for row in rows:
+        clue_id, clue, enum, answer_raw, wp_type, source, puzzle_number = row
+        input_records.append({
+            'id': clue_id,
+            'clue_text': clue,
+            'answer': answer_raw,
+            'enumeration': enum,
+            'wordplay_type': wp_type,
+            'source': source,
+            'puzzle_number': puzzle_number
+        })
+
+    if run_id is not None:
+        save_stage('input', run_id, input_records)
+
+    # ---- STAGE: DEFINITION ----
+    definition_stage_records = []
+
+    for row in rows:
+        clue_id, clue, enum, answer_raw, wp_type, source, puzzle_number = row
         answer = norm_letters(answer_raw)
         total_len = parse_enum(enum)
 
         record: Dict[str, Any] = {
+            "id": clue_id,
             "clue": clue,
             "enumeration": enum,
             "answer": answer,
@@ -326,7 +399,7 @@ def run_pipeline_probe(
         ]
 
         raw_candidates = def_result.get("candidates", []) or []
-        flat_candidates = _length_filter(raw_candidates, total_len)
+        flat_candidates = _length_filter(raw_candidates, enum)
 
         # ---- WINDOW → CANDIDATES (INVERTED SUPPORT) ----
         window_support: Dict[str, List[str]] = defaultdict(list)
@@ -356,10 +429,29 @@ def run_pipeline_probe(
 
         windows_with_hits = {w: c for w, c in window_support.items() if c}
 
+        # ---- Save Definition Stage Record ----
+        definition_answer_present = (
+                answer in {norm_letters(c) for c in flat_candidates}
+        )
+        definition_stage_records.append({
+            'id': clue_id,
+            'clue_text': clue,
+            'answer': answer_raw,
+            'definition_candidates': flat_candidates,
+            'answer_in_candidates': definition_answer_present
+        })
+
+        # ---- DEFINITION GATE: Skip if answer not in candidates ----
+        # Cannot solve if correct answer isn't even a candidate
+        if not definition_answer_present:
+            overall["clues"] += 1
+            overall["gate_failed"] += 1
+            continue
+
         # ---- Anagrams ----
         anag_hits = generate_anagram_hypotheses(
             clue_text=clue,
-            enumeration=total_len,
+            enumeration=enum,  # Pass raw enumeration - anagram_stage now normalizes it
             candidates=flat_candidates,
         )
 
@@ -408,10 +500,6 @@ def run_pipeline_probe(
             clue_text=clue,
             enumeration=total_len,
             candidates=flat_candidates,
-        )
-
-        definition_answer_present = (
-                answer in {norm_letters(c) for c in flat_candidates}
         )
 
         # ---- HIT CLASSIFICATION (REPORTING ONLY) ----
@@ -466,6 +554,14 @@ def run_pipeline_probe(
 
     conn.close()
 
+    # ---- SAVE DEFINITION STAGE ----
+    if run_id is not None:
+        save_stage('definition', run_id, definition_stage_records)
+
+    # ---- SAVE ANAGRAM STAGE ----
+    if run_id is not None:
+        save_stage('anagram', run_id, results)
+
     # Add forwarded analysis to overall stats
     overall["forwarded_anagram_cases"] = forwarded_anagram_cases
 
@@ -485,6 +581,7 @@ if __name__ == "__main__":
     print("\n=== PIPELINE SIMULATOR ===")
     print("POPULATION SUMMARY:")
     print(f"  clues processed           : {overall['clues']}")
+    print(f"  gate failed (no def match): {overall['gate_failed']}")
     print(f"  clues w/ def answer match : {overall['clues_with_def_match']}")
     print(f"  clues w/ anagram hit      : {overall['clues_with_anagram']}")
     print(f"  clues w/ lurker hit       : {overall['clues_with_lurker']}")

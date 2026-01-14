@@ -13,6 +13,7 @@ Architecture:
 4. Show compound wordplay opportunities with database-backed explanations
 
 UPDATED: Now uses database-integrated CompoundWordplayAnalyzer
+UPDATED: Now persists evidence and compound stages to SQLite
 """
 
 import sys
@@ -28,6 +29,15 @@ from solver.wordplay.anagram.compound_wordplay_analyzer import ExplanationSystem
 # Import EvidenceAnalyzer to apply evidence ranking to compound candidates
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 from evidence_analysis import EvidenceAnalyzer
+
+# Pipeline Persistence Integration
+try:
+    from data.pipeline_persistence import save_stage, get_stage_summary
+
+    PERSISTENCE_AVAILABLE = True
+except ImportError:
+    PERSISTENCE_AVAILABLE = False
+    print("WARNING: Pipeline persistence not available for compound analysis")
 
 
 class CompoundAnalyzer:
@@ -72,10 +82,11 @@ class CompoundAnalyzer:
 
         return False
 
-    def analyze_compound_cohort(self, results):
+    def analyze_compound_cohort(self, results, run_id=None):
         """
         Analyze compound candidates using evidence-ranked results.
         UPDATED: Now works with evidence-analyzed results and database lookups.
+        UPDATED: Now persists evidence and compound stages.
         """
         compound_candidates = [r for r in results if self.is_compound_candidate(r)]
 
@@ -107,6 +118,10 @@ class CompoundAnalyzer:
                 print(f"Warning: Could not analyze compound candidate {i + 1}: {e}")
                 continue
 
+        # ---- SAVE EVIDENCE STAGE ----
+        if run_id is not None and PERSISTENCE_AVAILABLE:
+            save_stage('evidence', run_id, evidence_enhanced_results)
+
         # Now work with evidence-enhanced results for compound analysis
         if not self.explanation_builder:
             print("\nCompound analysis disabled - explanation builder not available.")
@@ -134,11 +149,22 @@ class CompoundAnalyzer:
                 exp['compound_solution'] = compound_sol
                 exp['remaining_unresolved'] = remaining
                 exp['word_roles'] = enhanced_cases[i].get('word_roles', [])
+                exp['id'] = evidence_enhanced_results[i].get('id')  # Preserve clue_id
+
+                # CRITICAL: Copy likely_answer and db_answer for display
+                exp['likely_answer'] = enhanced_cases[i].get('likely_answer', '')
+                exp['db_answer'] = enhanced_cases[i].get('db_answer', '')
+                exp['answer_matches'] = enhanced_cases[i].get('answer_matches', False)
+
                 compound_explanations.append(exp)
 
             print(f"Cases with evidence analysis: {len(evidence_enhanced_results)}")
             print(f"Cases with enhanced attribution: {len(enhanced_cases)}")
             print(f"Cases analyzed: {len(compound_explanations)}")
+
+            # ---- SAVE COMPOUND STAGE ----
+            if run_id is not None and PERSISTENCE_AVAILABLE:
+                save_stage('compound', run_id, compound_explanations)
 
             return compound_explanations
 
@@ -168,7 +194,15 @@ def display_compound_results(compound_results, max_display=10):
 
     for i, result in enumerate(sorted_results[:max_display], 1):
         print(f"\n[{i}] CLUE: {result['clue']}")
-        print(f"    ANSWER: {result['answer']}")
+
+        # Show LIKELY ANSWER (what we solved) and DB ANSWER (for comparison)
+        likely_answer = result.get('likely_answer', result.get('answer', ''))
+        db_answer = result.get('db_answer', result.get('answer', ''))
+        answer_matches = result.get('answer_matches', likely_answer == db_answer)
+
+        match_symbol = "✓" if answer_matches else "✗"
+        print(f"    LIKELY ANSWER: {likely_answer}")
+        print(f"    DB ANSWER:     {db_answer} {match_symbol}")
 
         # Get explanation
         explanation = result.get('explanation', {})
@@ -234,6 +268,12 @@ def display_compound_results(compound_results, max_display=10):
                          (r.get('compound_solution') or {}).get('fully_resolved', False))
     print(f"\n  Fully resolved: {fully_resolved}/{len(compound_results)}")
 
+    # Count answer matches
+    matches = sum(1 for r in compound_results
+                  if r.get('answer_matches', False) or
+                  r.get('likely_answer', '') == r.get('db_answer', ''))
+    print(f"  Answer matches: {matches}/{len(compound_results)}")
+
 
 def main():
     """Main analysis function."""
@@ -267,9 +307,20 @@ def main():
         analyzer.close()
         raise e
 
+    # Get run_id from persistence (pipeline_simulator just saved input/definition/anagram stages)
+    run_id = None
+    if PERSISTENCE_AVAILABLE:
+        try:
+            summary = get_stage_summary()
+            run_id = summary.get('run_id')
+            print(f"\n📊 Pipeline persistence: run_id={run_id}")
+        except Exception as e:
+            print(f"WARNING: Could not get run_id: {e}")
+
     # Show original results summary
     print("\n📊 ORIGINAL PIPELINE RESULTS:")
     print(f"  clues processed           : {overall['clues']}")
+    print(f"  gate failed (no def match): {overall.get('gate_failed', 0)}")
     print(f"  clues w/ def answer match : {overall['clues_with_def_match']}")
     print(f"  clues w/ anagram hit      : {overall['clues_with_anagram']}")
     print(f"  clues w/ lurker hit       : {overall['clues_with_lurker']}")
@@ -277,7 +328,7 @@ def main():
 
     # Step 2: Analyze compound wordplay cohort
     print("\n🧩 STEP 2: Analyzing compound wordplay cohort with database lookups...")
-    enhanced_results = analyzer.analyze_compound_cohort(results)
+    enhanced_results = analyzer.analyze_compound_cohort(results, run_id=run_id)
 
     # Step 3: Display compound analysis results
     if enhanced_results:

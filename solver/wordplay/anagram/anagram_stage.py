@@ -94,10 +94,12 @@ def _generate_anagram_hypotheses_original(clue_text, enumeration, candidates):
         return []
 
     # ---- tokenise clue ----
-    words = [
-        w for w in clue_text.split()
-        if w.isalpha()
-    ]
+    # Keep words that contain letters (allow punctuation like apostrophes)
+    words = []
+    for w in clue_text.split():
+        letters_only = ''.join(c for c in w if c.isalpha())
+        if letters_only:  # Keep word if it has any letters
+            words.append(w)  # Keep original form for display
 
     word_counters = [(w, Counter(norm_letters(w))) for w in words]
 
