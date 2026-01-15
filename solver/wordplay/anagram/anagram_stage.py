@@ -5,22 +5,22 @@ import re
 from solver.solver_engine.resources import norm_letters
 
 # Evidence system integration (safe import with fallback)
+EVIDENCE_SYSTEM_AVAILABLE = False
+_evidence_detector = None
+ComprehensiveWordplayDetector = None
+
 try:
     from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
-
-    _evidence_detector = None
-
-
-    def _get_evidence_detector():
-        global _evidence_detector
-        if _evidence_detector is None:
-            _evidence_detector = ComprehensiveWordplayDetector()
-        return _evidence_detector
-
-
     EVIDENCE_SYSTEM_AVAILABLE = True
-except ImportError:
-    EVIDENCE_SYSTEM_AVAILABLE = False
+except ImportError as e:
+    print(f"EVIDENCE IMPORT FAILED: {e}")
+
+
+def _get_evidence_detector():
+    global _evidence_detector
+    if _evidence_detector is None and EVIDENCE_SYSTEM_AVAILABLE:
+        _evidence_detector = ComprehensiveWordplayDetector()
+    return _evidence_detector
 
 
 def _normalize_enumeration(enumeration):
@@ -50,9 +50,6 @@ def generate_anagram_hypotheses(clue_text, enumeration, candidates):
     # STEP 1: Run original logic (exactly as before)
     original_hypotheses = _generate_anagram_hypotheses_original(clue_text, enumeration,
                                                           candidates)
-    #print(
-        #f"BRUTE: {len(original_hypotheses)}, EVIDENCE_AVAIL:
-    # {EVIDENCE_SYSTEM_AVAILABLE}")
 
     # STEP 2: If original found hits, return them (preserves existing behavior)
     if original_hypotheses:
