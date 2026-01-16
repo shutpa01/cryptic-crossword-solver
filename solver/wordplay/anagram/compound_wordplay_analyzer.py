@@ -518,8 +518,11 @@ class CompoundWordplayAnalyzer:
         """
         Find the anagram indicator in the clue.
 
-        1. First try two-word indicators in database
-        2. Then try single-word indicators in database
+        CORRECTED: Now searches only remaining words (clue - definition - fodder).
+        The indicator must be in the remaining words, not in the definition or fodder.
+
+        1. First try two-word indicators in database (excluding definition and fodder)
+        2. Then try single-word indicators in database (excluding definition and fodder)
         3. If not found, infer based on proximity to fodder and distance from definition
         """
         fodder_lower = {norm_letters(w) for w in fodder_words}
@@ -531,8 +534,11 @@ class CompoundWordplayAnalyzer:
         for i in range(len(clue_words) - 1):
             word1 = clue_words[i]
             word2 = clue_words[i + 1]
-            # Skip if either word is fodder
+            # Skip if either word is fodder or definition
             if norm_letters(word1) in fodder_lower or norm_letters(word2) in fodder_lower:
+                continue
+            if norm_letters(word1) in def_words_lower or norm_letters(
+                    word2) in def_words_lower:
                 continue
             # Build two-word phrase (strip punctuation for lookup)
             two_word = f"{norm_letters(word1)} {norm_letters(word2)}"
@@ -542,7 +548,10 @@ class CompoundWordplayAnalyzer:
 
         # Second pass: look for SINGLE-WORD indicators in database
         for word in clue_words:
+            # Skip if word is fodder or definition
             if norm_letters(word) in fodder_lower:
+                continue
+            if norm_letters(word) in def_words_lower:
                 continue
             indicator_match = self.db.lookup_indicator(word)
             # DEBUG: uncomment to trace indicator lookup
@@ -625,8 +634,8 @@ class CompoundWordplayAnalyzer:
             best_candidate = adjacent_candidates[0][0] if adjacent_candidates else None
 
         if best_candidate:
-            # Insert the inferred indicator into database for future use
-            self._insert_inferred_indicator(best_candidate, 'anagram')
+            # REMOVED: Do not insert inferred indicators into database - this pollutes data
+            # self._insert_inferred_indicator(best_candidate, 'anagram')
             return best_candidate
 
         return None
@@ -1342,7 +1351,7 @@ class ExplanationSystemBuilder:
         self.analyzer.close()
 
     def enhance_pipeline_data(self, evidence_enhanced_cases: List[Dict[str, Any]]) -> \
-    List[Dict[str, Any]]:
+            List[Dict[str, Any]]:
         """
         Process evidence-enhanced cases through compound analysis.
         """

@@ -609,83 +609,58 @@ stage_input → stage_definition → stage_anagram → stage_evidence → stage_
 
 ## DEFICIENCIES (WORKLIST)
 
-| # | Description | File | Priority |
-|---|-------------|------|----------|
-| 3 | Indicator search scope too broad | compound_wordplay_analyzer.py | **Highest** |
-| 4 | Pass 3 inserts inferred indicators into database | compound_wordplay_analyzer.py | **Essential** |
-| 5 | Definition window determination affects indicator selection | compound_wordplay_analyzer.py | Lower |
+| # | Description | File | Status |
+|---|-------------|------|--------|
+| 3 | ~~Indicator search scope too broad~~ | compound_wordplay_analyzer.py | **✓ RESOLVED** |
+| 4 | ~~Pass 3 inserts inferred indicators into database~~ | compound_wordplay_analyzer.py | **✓ RESOLVED** |
+| 5 | Definition window determination affects indicator selection | compound_wordplay_analyzer.py | Lower priority |
 | 6 | Monolith file with mixed concerns | compound_wordplay_analyzer.py | Architectural |
 | 7 | compound_analysis.py is misnamed and mislocated | compound_analysis.py | Organisational |
 
-*Note: Original Deficiencies 1-2 (add indicator detection to brute force) have been superseded by the revised approach.*
+*Note: Original Deficiencies 1-2 (add indicator detection to brute force) were superseded. Deficiencies 3-4 have been resolved.*
 
 ---
 
-### Deficiency 3: Indicator search scope is too broad
+## RESOLVED ISSUES
+
+### ✓ Resolved: Deficiency 3 - Indicator search scope
 
 **File:** `compound_wordplay_analyzer.py`
 
-**Function:** `_find_anagram_indicator()` (lines 515-632)
+**Function:** `_find_anagram_indicator()` (lines 515-560)
 
-**The problem:**
+**The problem was:** The function searched ALL clue words for indicators, including definition words. This could cause it to pick a word from the definition as the indicator.
 
-When brute force finds an exact match, we already know:
-- **Definition** - from the definition window (which produced the candidate)
-- **Fodder** - from brute force (the words that anagram to the candidate)
-
-Therefore: **remaining words = clue - definition - fodder** MUST contain the indicator.
-
-But `_find_anagram_indicator()` searches ALL clue words (Pass 2, lines 543-551):
+**The fix:** Pass 1 (two-word) and Pass 2 (single-word) now skip definition words:
 ```python
-for word in clue_words:  # Searches ALL words
-    if norm_letters(word) in fodder_lower:
-        continue  # Only skips fodder
-    indicator_match = self.db.lookup_indicator(word)
+# Skip if word is fodder or definition
+if norm_letters(word) in fodder_lower:
+    continue
+if norm_letters(word) in def_words_lower:
+    continue
 ```
 
-**It does NOT skip definition words.** This means it can pick a word from the definition as the indicator.
-
-**Example:**
-- Clue: "Long-term plan targets unusual year (8)"
-- Definition: "Long-term plan" (produced STRATEGY as candidate)
-- Fodder: "targets" (anagrams to STRATEGY with Y)
-- Remaining words: "unusual", "year"
-- Indicator MUST be in: "unusual", "year"
-
-But the code searches: "Long-term", "plan", "targets", "unusual", "year"
-- If "plan" were in the indicators database, it would be returned before "unusual"
-- Even though "plan" is part of the definition
-
-**Required fix:**
-
-Search ONLY remaining words (clue - definition - fodder) for the indicator:
-```python
-remaining_words = [w for w in clue_words
-                   if norm_letters(w) not in fodder_lower
-                   and norm_letters(w) not in definition_lower]
-
-for word in remaining_words:  # Search only remaining
-    indicator_match = self.db.lookup_indicator(word)
-```
+**Verified:** Tested with "Long-term plan targets unusual year (8)" - now correctly picks "unusual" as indicator instead of "plan".
 
 ---
 
-### Deficiency 4: Pass 3 inserts inferred indicators into database
+### ✓ Resolved: Deficiency 4 - Database pollution
 
 **File:** `compound_wordplay_analyzer.py`
 
-**Function:** `_find_anagram_indicator()` (line 629)
+**Function:** `_find_anagram_indicator()` (line 637)
 
-**Problem:** When Pass 1 and 2 don't find an indicator in the database, Pass 3 uses heuristics to guess, then inserts the guessed indicator into the database:
+**The problem was:** Pass 3 inserted inferred indicators into the database, polluting it with incorrect data.
+
+**The fix:** Commented out the database insertion call:
 ```python
-self._insert_inferred_indicator(best_candidate, 'anagram')
+# REMOVED: Do not insert inferred indicators into database - this pollutes data
+# self._insert_inferred_indicator(best_candidate, 'anagram')
 ```
 
-**Impact:** Incorrect indicators pollute the database, causing future failures.
-
-**Required fix:** Remove this line. Do not insert inferred indicators.
-
 ---
+
+## REMAINING DEFICIENCIES
 
 ### Deficiency 5: Definition window determination affects indicator selection
 
@@ -798,36 +773,32 @@ stage_definition → stage_anagram → stage_evidence → stage_compound → sta
 
 ---
 
-## CORRECTIVE ACTIONS SUMMARY (WORKLIST)
+## CORRECTIVE ACTIONS SUMMARY
 
 The deficiencies documented above serve as the worklist. Each action corresponds to a deficiency:
 
-| Action | Deficiency | File | Fix Required |
-|--------|------------|------|--------------|
-| 1 | Deficiency 3 | compound_wordplay_analyzer.py | **Search only remaining words (clue - definition - fodder), not all clue words** |
-| 2 | Deficiency 4 | compound_wordplay_analyzer.py | Remove `_insert_inferred_indicator()` call - do not pollute database |
-| 3 | Deficiency 5 | compound_wordplay_analyzer.py | Improve window selection when multiple match |
-| 4 | (Superseded) | anagram_evidence_system.py | Transfer indicator_words to AnagramEvidence (if present) |
-| 5 | Deficiency 6 | compound_wordplay_analyzer.py | **Split file: analysis vs presentation. Create explanation_builder.py and stage_explanation table** |
-| 6 | Deficiency 7 | compound_analysis.py | **Rename to anagram_analysis.py, move to solver/wordplay/anagram/, make permanent** |
+| Action | Deficiency | File | Status |
+|--------|------------|------|--------|
+| 1 | Deficiency 3 | compound_wordplay_analyzer.py | **✓ DONE** - Search only remaining words |
+| 2 | Deficiency 4 | compound_wordplay_analyzer.py | **✓ DONE** - Removed database insertion |
+| 3 | Deficiency 5 | compound_wordplay_analyzer.py | Pending - Improve window selection |
+| 4 | (Superseded) | anagram_evidence_system.py | N/A |
+| 5 | Deficiency 6 | compound_wordplay_analyzer.py | Pending - Split file into analysis/presentation |
+| 6 | Deficiency 7 | compound_analysis.py | Pending - Rename to anagram_analysis.py, relocate |
 
-### Priority Order
+### Completed
 
-**Action 1 (Deficiency 3) is highest priority** - For brute force hits, we already have definition + fodder, so the indicator MUST be in the remaining words. Constraining the search scope directly fixes the observed bug ("plan" picked instead of "unusual").
+**Action 1 (Deficiency 3) ✓** - Indicator search now skips definition words. Verified with "Long-term plan targets unusual year (8)".
 
-**Action 2 (Deficiency 4) is essential** - Stop polluting the database with incorrect inferred indicators.
+**Action 2 (Deficiency 4) ✓** - Database insertion of inferred indicators removed.
 
-**Action 5 (Deficiency 6) is architectural** - Split the monolith for maintainability. Can be done alongside or after functional fixes.
+### Remaining
 
-**Action 6 (Deficiency 7) is organisational** - Rename and relocate the orchestration file to reflect its permanent role in the anagram track.
+**Action 5 (Deficiency 6)** - Architectural: Split the monolith for maintainability.
 
-**Action 3 (Deficiency 5) is lower priority** - May improve edge cases but Action 1 addresses the core issue.
+**Action 6 (Deficiency 7)** - Organisational: Rename and relocate the orchestration file.
 
-**Action 4 is superseded** - Original deficiencies 1 and 2 proposed adding indicator detection to brute force. This is no longer needed since Action 1 constrains the indicator search in compound stage.
-
-### What We Are NOT Doing
-
-We are NOT adding indicator detection to brute force (`_generate_anagram_hypotheses_original`). The brute force method finds exact anagram matches without needing to know the indicator. The compound stage can reliably find the indicator by searching the constrained remaining words.
+**Action 3 (Deficiency 5)** - Lower priority: May improve edge cases.
 
 ---
 
