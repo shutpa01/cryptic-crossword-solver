@@ -28,6 +28,8 @@ import sys
 import os
 
 sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
+
+
 # generate_anagram_hypotheses imported lazily in analyze_and_rank_anagram_candidates to avoid circular import
 
 
@@ -203,8 +205,10 @@ class ComprehensiveWordplayDetector:
     def _load_fallback_indicators(self):
         """Load minimal fallback indicators if database unavailable."""
         self.anagram_indicators = ['broken', 'wild', 'crazy', 'mixed', 'drunk', 'mad',
-                                   'out', 'off', 'confused', 'damaged', 'ruined', 'smashed',
-                                   'awful', 'bad', 'upset', 'destroyed', 'wrecked', 'mangled']
+                                   'out', 'off', 'confused', 'damaged', 'ruined',
+                                   'smashed',
+                                   'awful', 'bad', 'upset', 'destroyed', 'wrecked',
+                                   'mangled']
         self.anagram_indicators_single = set(self.anagram_indicators)
         self.anagram_indicators_two_word = set()
         self.insertion_indicators = ['in', 'into', 'inside', 'within', 'holding',
@@ -397,7 +401,10 @@ class ComprehensiveWordplayDetector:
                                direction: str) -> List[ContiguousFodder]:
         """
         Expand in one direction from indicator to find valid contiguous fodder.
-        Allows skipping one link word at the boundary.
+
+        UPDATED: Now tries BOTH with and without link words as fodder.
+        Link words at boundaries are first tried as fodder, then also tried as skippable.
+        This allows "in doves" to be fodder (7 letters) rather than just "doves" (5 letters).
 
         Returns list of ContiguousFodder objects (all valid contiguous sequences).
         """
@@ -414,85 +421,61 @@ class ComprehensiveWordplayDetector:
         if boundary < 0 or boundary >= n:
             return results
 
-        # Check if boundary word is a link word - if so, skip it
-        start_pos = boundary
+        # Try TWO expansion strategies:
+        # 1. Include link words as potential fodder (try first)
+        # 2. Skip boundary link words (original behavior)
+
+        start_positions = [boundary]  # Always try from the boundary first
+
+        # If boundary is a link word, ALSO try skipping it (but try including it first)
         if tokens[boundary].lower() in LINK_WORDS:
-            start_pos = boundary + step
-            if start_pos < 0 or start_pos >= n:
-                return results
+            skip_pos = boundary + step
+            if 0 <= skip_pos < n:
+                start_positions.append(skip_pos)
 
-        # Expand contiguously from start_pos
-        current_words = []
-        current_positions = []
-        pos = start_pos
-        skipped_transparent_link = False  # Only allow skipping ONE transparent link word
+        for start_pos in start_positions:
+            # Expand contiguously from start_pos
+            current_words = []
+            current_positions = []
+            pos = start_pos
 
-        while 0 <= pos < n:
-            token = tokens[pos]
-            token_lower = token.lower()
+            while 0 <= pos < n:
+                token = tokens[pos]
+                token_lower = token.lower()
 
-            # Stop if we hit a non-anagram indicator word (insertion, deletion, reversal, hidden, parts)
-            # But allow anagram indicators through - they may be fodder in compound clues
-            if (token_lower in self.insertion_indicators or
-                token_lower in self.deletion_indicators or
-                token_lower in self.reversal_indicators or
-                token_lower in self.hidden_indicators or
-                token_lower in self.parts_indicators):
-                break
+                # NOTE: We no longer stop at other indicator types (insertion, deletion, etc.)
+                # Words like "in" could be fodder ("in doves" = INDOVES) or indicators.
+                # Let letter matching decide which interpretation is correct.
+                # Only stop at definition words (handled by caller) or end of clue.
 
-            # Handle link words after fodder has started
-            if token_lower in LINK_WORDS and current_words:
-                # For transparent link words (with, and, or), peek ahead to see if more fodder exists
-                # But only skip ONE transparent link word per expansion
-                if token_lower in TRANSPARENT_LINK_WORDS and not skipped_transparent_link:
-                    peek_pos = pos + step
-                    # Check if there's a non-link word ahead (potential fodder)
-                    if 0 <= peek_pos < n:
-                        peek_token = tokens[peek_pos].lower()
-                        # If next word is NOT a link word and NOT a non-anagram indicator, skip this link word
-                        # (anagram indicators are allowed through as potential fodder)
-                        if (peek_token not in LINK_WORDS and
-                            peek_token not in self.insertion_indicators and
-                            peek_token not in self.deletion_indicators and
-                            peek_token not in self.reversal_indicators and
-                            peek_token not in self.hidden_indicators and
-                            peek_token not in self.parts_indicators):
-                            # Skip the transparent link word, continue to next
-                            skipped_transparent_link = True  # Mark that we've used our one skip
-                            pos += step
-                            continue
-                # Stop for non-transparent link words, if already skipped one, or if no fodder ahead
-                break
+                # Link words CAN be fodder - they contribute letters (e.g., "in" contributes I,N)
+                # Include them and let letter matching decide if they're needed
+                # Note: We don't skip or stop for link words anymore - they're valid fodder
 
-            # Skip link words at the start (these don't count against our one-skip limit)
-            if token_lower in LINK_WORDS and not current_words:
+                # Add this word to fodder (INCLUDING link words - they contribute letters)
+                current_words.append(token)
+                current_positions.append(pos)
+
+                # Get ordered words (left expansion needs reversal)
+                if direction == 'left':
+                    ordered_words = list(reversed(current_words))
+                    ordered_positions = list(reversed(current_positions))
+                else:
+                    ordered_words = current_words[:]
+                    ordered_positions = current_positions[:]
+
+                letters = self.normalize_letters(' '.join(ordered_words))
+
+                # Record this as a valid contiguous sequence
+                results.append(ContiguousFodder(
+                    words=ordered_words,
+                    positions=ordered_positions,
+                    letters=letters,
+                    indicator=indicator,
+                    side=direction
+                ))
+
                 pos += step
-                continue
-
-            # Add this word to fodder
-            current_words.append(token)
-            current_positions.append(pos)
-
-            # Get ordered words (left expansion needs reversal)
-            if direction == 'left':
-                ordered_words = list(reversed(current_words))
-                ordered_positions = list(reversed(current_positions))
-            else:
-                ordered_words = current_words[:]
-                ordered_positions = current_positions[:]
-
-            letters = self.normalize_letters(' '.join(ordered_words))
-
-            # Record this as a valid contiguous sequence
-            results.append(ContiguousFodder(
-                words=ordered_words,
-                positions=ordered_positions,
-                letters=letters,
-                indicator=indicator,
-                side=direction
-            ))
-
-            pos += step
 
         return results
 
@@ -818,7 +801,8 @@ class ComprehensiveWordplayDetector:
                 if ind_list and ind_type != 'anagram_matches':
                     print(f"  {ind_type}: {ind_list}")
             if indicators.get('anagram_matches'):
-                print(f"  anagram_matches: {len(indicators['anagram_matches'])} positions")
+                print(
+                    f"  anagram_matches: {len(indicators['anagram_matches'])} positions")
                 for match in indicators['anagram_matches']:
                     print(f"    - {match.words} at pos {match.start_pos}-{match.end_pos}")
 

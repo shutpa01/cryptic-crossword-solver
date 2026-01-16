@@ -397,14 +397,20 @@ class CompoundWordplayAnalyzer:
         scored_candidates = evidence_analysis.get('scored_candidates', [])
 
         if not scored_candidates:
-            return self._build_fallback(case, clue_words, db_answer)
+            # Lazy import to avoid circular dependency
+            from solver.wordplay.anagram.explanation_builder import ExplanationBuilder
+            explainer = ExplanationBuilder()
+            return explainer.build_fallback(case, clue_words, db_answer)
 
         # Use top ranked candidate - THIS is our likely answer
         top_candidate = scored_candidates[0]
         evidence = top_candidate.get('evidence')
 
         if not evidence:
-            return self._build_fallback(case, clue_words, db_answer)
+            # Lazy import to avoid circular dependency
+            from solver.wordplay.anagram.explanation_builder import ExplanationBuilder
+            explainer = ExplanationBuilder()
+            return explainer.build_fallback(case, clue_words, db_answer)
 
         # LIKELY ANSWER comes from the matched candidate, not database
         likely_answer = top_candidate.get('candidate', '').upper().replace(' ', '')
@@ -455,19 +461,17 @@ class CompoundWordplayAnalyzer:
                 word_roles.append(WordRole(w, 'definition', likely_answer, 'pipeline'))
                 accounted_words.add(w.lower())
 
-        # Account for link words
-        for w in clue_words:
-            w_norm = norm_letters(w)
-            if w_norm in self.link_words and w_norm not in {norm_letters(a) for a in
-                                                            accounted_words}:
-                word_roles.append(WordRole(w, 'link', '', 'heuristic'))
-                accounted_words.add(w.lower())
+        # NOTE: Link words are NOT marked here anymore.
+        # They will be included in remaining_words so compound analysis can use them
+        # (for fodder, parts indicators like "close to", etc.)
+        # Unused link words will be marked at the end.
 
         # Helper to normalize word for comparison (strip punctuation)
         def normalize_word(w):
             return ''.join(c.lower() for c in w if c.isalpha())
 
         # Find remaining words (compare normalized forms)
+        # Include link words - they may be fodder or part of indicators
         remaining_words = []
         for w in clue_words:
             w_norm = normalize_word(w)
@@ -485,8 +489,19 @@ class CompoundWordplayAnalyzer:
                 clue_words, definition_window
             )
 
+        # NOW mark remaining link words (those not used by compound analysis)
+        for w in clue_words:
+            w_norm = norm_letters(w)
+            if w_norm in self.link_words and w_norm not in {norm_letters(a) for a in
+                                                            accounted_words}:
+                word_roles.append(WordRole(w, 'link', '', 'heuristic'))
+                accounted_words.add(w.lower())
+
         # Build explanation using LIKELY_ANSWER
-        explanation = self._build_explanation(
+        # Lazy import to avoid circular dependency
+        from solver.wordplay.anagram.explanation_builder import ExplanationBuilder
+        explainer = ExplanationBuilder()
+        explanation = explainer.build_explanation(
             case, word_roles, fodder_words, fodder_letters,
             anagram_indicator, definition_window, compound_solution, clue_words,
             likely_answer
@@ -771,9 +786,89 @@ class CompoundWordplayAnalyzer:
         def is_anagram(s1, s2):
             return sorted(s1.upper()) == sorted(s2.upper())
 
+        # FIRST: Check for two-word parts indicators (like "close to", "at first")
+        # These extract first/last letters from adjacent words
+        parts_found = []
+        words_used_by_parts = set()
+
+        for i, word in enumerate(remaining_words[:-1]):
+            # Check two-word combination
+            two_word = f"{norm_letters(word)} {norm_letters(remaining_words[i + 1])}"
+            indicator_match = self.db.lookup_indicator(two_word)
+
+            if indicator_match and indicator_match.wordplay_type == 'parts':
+                subtype = indicator_match.subtype or ''
+
+                # Find the source word (word adjacent to the indicator that provides the letter)
+                # Look for the word that comes after the two-word indicator
+                source_word = None
+                source_idx = None
+
+                if i + 2 < len(remaining_words):
+                    source_word = remaining_words[i + 2]
+                    source_idx = i + 2
+
+                if source_word:
+                    source_letters = get_letters(source_word)
+                    extracted_letter = None
+
+                    # Extract first or last letter based on subtype
+                    if 'first' in subtype.lower() and source_letters:
+                        extracted_letter = source_letters[0]
+                    elif 'last' in subtype.lower() and source_letters:
+                        extracted_letter = source_letters[-1]
+
+                    if extracted_letter and extracted_letter in needed_letters:
+                        parts_found.append({
+                            'indicator': f"{word} {remaining_words[i + 1]}",
+                            'indicator_words': [word, remaining_words[i + 1]],
+                            'source_word': source_word,
+                            'extracted_letter': extracted_letter,
+                            'subtype': subtype
+                        })
+                        words_used_by_parts.update(
+                            [word.lower(), remaining_words[i + 1].lower(),
+                             source_word.lower()])
+
+                        # Update needed letters
+                        needed_letters = needed_letters.replace(extracted_letter, '', 1)
+
+        # Process parts indicators found
+        for part in parts_found:
+            # Add indicator words to word_roles
+            for ind_word in part['indicator_words']:
+                word_roles.append(WordRole(
+                    ind_word, 'parts_indicator', '', f"database ({part['subtype']})"
+                ))
+                accounted_words.add(ind_word.lower())
+
+            # Add source word as providing the extracted letter
+            # Make source string readable
+            source_desc = 'last letter of' if 'last' in part[
+                'subtype'].lower() else 'first letter of'
+            word_roles.append(WordRole(
+                part['source_word'], 'substitution', part['extracted_letter'],
+                source_desc
+            ))
+            accounted_words.add(part['source_word'].lower())
+
+            # Add to substitutions list for formula building
+            found_substitutions.append((
+                part['source_word'],
+                SubstitutionMatch(
+                    word=part['source_word'],
+                    letters=part['extracted_letter'],
+                    category=source_desc
+                )
+            ))
+
         for word in remaining_words:
             word_lower = word.lower()
             word_letters = get_letters(word)
+
+            # Skip words already processed by parts indicators
+            if word_lower in words_used_by_parts:
+                continue
 
             # Check if it's a positional indicator (but not in definition)
             if word_lower in self.positional_words and word_lower not in def_words_lower:
@@ -794,6 +889,55 @@ class CompoundWordplayAnalyzer:
                     ))
                     accounted_words.add(word_lower)
                     continue
+
+                # Handle single-word parts indicators (like "initially", "finally")
+                elif op_type == 'parts' and needed_letters:
+                    subtype = indicator_match.subtype or ''
+                    # Find the next word in remaining_words to extract letter from
+                    try:
+                        current_idx = remaining_words.index(word)
+                        if current_idx + 1 < len(remaining_words):
+                            source_word = remaining_words[current_idx + 1]
+                            source_letters = get_letters(source_word)
+                            extracted_letter = None
+
+                            if 'first' in subtype.lower() and source_letters:
+                                extracted_letter = source_letters[0]
+                            elif 'last' in subtype.lower() and source_letters:
+                                extracted_letter = source_letters[-1]
+
+                            if extracted_letter and extracted_letter in needed_letters:
+                                # Add indicator
+                                word_roles.append(WordRole(
+                                    word, 'parts_indicator', '', f"database ({subtype})"
+                                ))
+                                accounted_words.add(word_lower)
+
+                                # Add source word with readable description
+                                source_desc = 'last letter of' if 'last' in subtype.lower() else 'first letter of'
+                                word_roles.append(WordRole(
+                                    source_word, 'substitution', extracted_letter,
+                                    source_desc
+                                ))
+                                accounted_words.add(source_word.lower())
+                                words_used_by_parts.add(source_word.lower())
+
+                                # Add to substitutions
+                                found_substitutions.append((
+                                    source_word,
+                                    SubstitutionMatch(
+                                        word=source_word,
+                                        letters=extracted_letter,
+                                        category=source_desc
+                                    )
+                                ))
+
+                                # Update needed letters
+                                needed_letters = needed_letters.replace(extracted_letter,
+                                                                        '', 1)
+                                continue
+                    except ValueError:
+                        pass  # word not in remaining_words
 
             # Check if this word's letters are contained in needed letters (partial fodder)
             # This handles cases like "ill" providing ILL when we need WILL
@@ -1145,254 +1289,6 @@ class CompoundWordplayAnalyzer:
             'fully_resolved': True,
             'classified_indicators': classified
         }
-
-    def _build_explanation(self, case: Dict[str, Any],
-                           word_roles: List[WordRole],
-                           fodder_words: List[str],
-                           fodder_letters: str,
-                           anagram_indicator: Optional[str],
-                           definition_window: Optional[str],
-                           compound_solution: Optional[Dict[str, Any]],
-                           clue_words: List[str],
-                           likely_answer: str) -> Dict[str, Any]:
-        """
-        Build a complete explanation following the format spec.
-
-        Uses likely_answer (from matched candidate), NOT database answer.
-        """
-        # Get substitutions from compound solution
-        subs = []
-        if compound_solution and compound_solution.get('substitutions'):
-            subs = compound_solution['substitutions']
-
-        # Get additional fodder from compound solution
-        additional_fodder = []
-        if compound_solution and compound_solution.get('additional_fodder'):
-            additional_fodder = compound_solution['additional_fodder']
-
-        # Build fodder part - include both original and additional fodder
-        all_fodder_words = list(fodder_words) if fodder_words else []
-        for word, letters in additional_fodder:
-            all_fodder_words.append(word.upper().replace("'", ""))  # Strip apostrophes
-
-        fodder_part = ' + '.join(
-            w.upper() for w in all_fodder_words) if all_fodder_words else ''
-
-        # Check for deletion operation (only if validated with indicator)
-        if compound_solution and compound_solution.get('operation') == 'deletion':
-            deletion_target = compound_solution.get('deletion_target')
-            excess = compound_solution.get('excess_letters', '')
-
-            if deletion_target:
-                word, letters, category = deletion_target
-                formula = f"anagram({fodder_part}) - {letters} ({word}) = {likely_answer}"
-            else:
-                formula = f"anagram({fodder_part}) - {excess} = {likely_answer}"
-        elif compound_solution and compound_solution.get('operation') == 'reduced_fodder':
-            # Reduced fodder with substitution - show the corrected fodder
-            reduced = compound_solution.get('reduced_fodder', '')
-            subs_from_compound = compound_solution.get('substitutions', [])
-            if subs_from_compound:
-                sub_part = ' + '.join(
-                    f"{letters} ({word})" for word, letters, _ in subs_from_compound)
-                # Get the actual fodder words (not the removed one)
-                actual_fodder = [wr.word for wr in word_roles if wr.role == 'fodder']
-                fodder_part = ' + '.join(w.upper() for w in actual_fodder)
-                formula = f"anagram({fodder_part}) + {sub_part} = {likely_answer}"
-            else:
-                formula = f"anagram({reduced}) = {likely_answer}"
-        elif compound_solution and compound_solution.get(
-                'operation') == 'unresolved_excess':
-            # Excess letters but no deletion indicator - show honest formula
-            formula = f"anagram({fodder_part}) = {likely_answer} [excess letters unresolved]"
-        elif subs:
-            # Compound with substitutions (additions)
-            sub_part = ' + '.join(f"{letters} ({word})" for word, letters, _ in subs)
-
-            construction = compound_solution.get('construction',
-                                                 {}) if compound_solution else {}
-            op = construction.get('operation', 'concatenation')
-
-            if op == 'insertion':
-                formula = f"anagram({fodder_part}) with {sub_part} inserted = {likely_answer}"
-            elif op == 'container':
-                formula = f"{sub_part} inside anagram({fodder_part}) = {likely_answer}"
-            else:
-                formula = f"anagram({fodder_part}) + {sub_part} = {likely_answer}"
-        else:
-            # Pure anagram
-            formula = f"anagram({fodder_part}) = {likely_answer}"
-
-        # Build word-by-word explanation following clue order
-        explanations = []
-        # Use norm_letters for lookup to handle punctuation (e.g., "gate," matches "gate")
-        role_lookup = {norm_letters(wr.word): wr for wr in word_roles}
-        explained_words = set()
-
-        for word in clue_words:
-            word_norm = norm_letters(word)
-
-            if word_norm in explained_words:
-                continue
-
-            if word_norm in role_lookup:
-                wr = role_lookup[word_norm]
-                explained_words.add(word_norm)
-
-                if wr.role == 'definition':
-                    explanations.append(f'• "{word}" = definition for {likely_answer}')
-                elif wr.role == 'fodder':
-                    explanations.append(f'• "{word}" = anagram fodder')
-                elif wr.role == 'anagram_indicator':
-                    explanations.append(f'• "{word}" = anagram indicator')
-                elif wr.role == 'substitution':
-                    explanations.append(f'• "{word}" = {wr.contributes} ({wr.source})')
-                elif wr.role == 'deletion_target':
-                    explanations.append(f'• "{word}" = {wr.contributes} (to be removed)')
-                elif wr.role == 'deletion_indicator':
-                    explanations.append(f'• "{word}" = deletion indicator')
-                elif wr.role == 'positional_indicator':
-                    explanations.append(
-                        f'• "{word}" = positional indicator (construction order)')
-                elif wr.role == 'insertion_indicator':
-                    explanations.append(f'• "{word}" = insertion indicator')
-                elif wr.role == 'container_indicator':
-                    explanations.append(f'• "{word}" = container indicator')
-                elif wr.role == 'link':
-                    pass  # Skip link words in explanation
-                else:
-                    # Generic indicator
-                    if '_indicator' in wr.role:
-                        ind_type = wr.role.replace('_indicator', '')
-                        explanations.append(f'• "{word}" = {ind_type} indicator')
-
-        return {
-            'formula': formula,
-            'breakdown': explanations,
-            'quality': self._assess_quality(compound_solution, word_roles, clue_words)
-        }
-
-    def _assess_quality(self, compound_solution: Optional[Dict[str, Any]],
-                        word_roles: List[WordRole],
-                        clue_words: List[str]) -> str:
-        """Assess explanation quality based on word coverage."""
-        accounted = {norm_letters(wr.word) for wr in word_roles}
-        total_words = len(
-            [w for w in clue_words if norm_letters(w) not in self.link_words])
-        accounted_content = len([w for w in clue_words
-                                 if norm_letters(w) in accounted and norm_letters(
-                w) not in self.link_words])
-
-        # Calculate coverage ratio
-        coverage = accounted_content / total_words if total_words > 0 else 0
-
-        # Check for required elements
-        has_definition = any(wr.role == 'definition' for wr in word_roles)
-        has_fodder = any(wr.role == 'fodder' for wr in word_roles)
-        has_indicator = any('indicator' in wr.role for wr in word_roles)
-
-        # Compound with substitutions
-        if compound_solution and compound_solution.get('fully_resolved'):
-            if coverage >= 0.9:
-                return 'solved'
-            else:
-                return 'high'
-
-        # Pure anagram - check if fully explained
-        if has_definition and has_fodder and has_indicator:
-            if coverage >= 0.9:
-                return 'solved'
-            elif coverage >= 0.7:
-                return 'high'
-            else:
-                return 'medium'
-
-        # Partial explanation
-        if compound_solution and compound_solution.get('substitutions'):
-            return 'medium'
-        elif has_fodder and has_indicator:
-            return 'medium'
-        elif has_fodder:
-            return 'low'
-        else:
-            return 'none'
-
-    def _build_fallback(self, case: Dict[str, Any],
-                        clue_words: List[str], db_answer: str) -> Dict[str, Any]:
-        """Fallback when no evidence available."""
-        return {
-            'clue': case.get('clue', ''),
-            'likely_answer': '',  # No likely answer - couldn't solve
-            'db_answer': db_answer,  # For comparison only
-            'answer_matches': False,
-            'word_roles': [],
-            'definition_window': None,
-            'anagram_component': None,
-            'compound_solution': None,
-            'explanation': {
-                'formula': 'Unable to analyze',
-                'breakdown': [],
-                'quality': 'none'
-            },
-            'remaining_unresolved': clue_words
-        }
-
-
-class ExplanationSystemBuilder:
-    """
-    Wrapper class maintaining backward compatibility with pipeline.
-    Processes cases through the CompoundWordplayAnalyzer.
-    """
-
-    def __init__(self):
-        self.analyzer = CompoundWordplayAnalyzer()
-
-    def close(self):
-        self.analyzer.close()
-
-    def enhance_pipeline_data(self, evidence_enhanced_cases: List[Dict[str, Any]]) -> \
-            List[Dict[str, Any]]:
-        """
-        Process evidence-enhanced cases through compound analysis.
-        """
-        enhanced = []
-
-        print("Analyzing compound wordplay with database lookups...")
-
-        for i, case in enumerate(evidence_enhanced_cases):
-            if (i + 1) % 100 == 0:
-                print(f"  Processed {i + 1} cases...")
-
-            try:
-                result = self.analyzer.analyze_case(case)
-                enhanced.append(result)
-            except Exception as e:
-                print(f"Warning: Could not analyze case {i + 1}: {e}")
-                enhanced.append({
-                    'clue': case.get('clue', ''),
-                    'answer': case.get('answer', ''),
-                    'error': str(e)
-                })
-
-        print(f"Analyzed {len(enhanced)} cases.")
-        return enhanced
-
-    def build_explanations(self, enhanced_cases: List[Dict[str, Any]]) -> List[
-        Dict[str, Any]]:
-        """
-        Extract explanations from analyzed cases.
-        """
-        return [
-            {
-                'clue': case.get('clue', ''),
-                'likely_answer': case.get('likely_answer', ''),
-                'db_answer': case.get('db_answer', ''),
-                'answer_matches': case.get('answer_matches', False),
-                'explanation': case.get('explanation', {}),
-                'quality': case.get('explanation', {}).get('quality', 'none')
-            }
-            for case in enhanced_cases
-        ]
 
 
 def test_database_lookup():

@@ -23,7 +23,7 @@ sys.path.insert(0, r'C:\Users\shute\PycharmProjects\cryptic_solver')
 
 # Import the original pipeline simulator (maintaining sanctity)
 from solver.solver_engine.pipeline_simulator import run_pipeline_probe, MAX_CLUES, WORDPLAY_TYPE
-from solver.wordplay.anagram.compound_wordplay_analyzer import ExplanationSystemBuilder
+from solver.wordplay.anagram.explanation_builder import ExplanationSystemBuilder
 
 # Import EvidenceAnalyzer to apply evidence ranking to compound candidates
 from solver.solver_engine.evidence_analysis import EvidenceAnalyzer

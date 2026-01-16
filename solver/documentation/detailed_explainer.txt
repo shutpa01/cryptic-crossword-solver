@@ -293,7 +293,7 @@ if can_contribute:
 - `_generate_anagram_hypotheses_evidence()` also returns empty
 - `generate_anagram_hypotheses()` returns empty list (line 70-71)
 - **Still saved to stage_anagram** with `hit_found = 0` and empty fields
-- **Filtered out by compound_analysis.py** - not processed further
+- **Filtered out by anagram_analysis.py** - not processed further
 
 **In pipeline_simulator.py:**
 - `record["anagrams"] = []` (empty list)
@@ -305,7 +305,7 @@ if can_contribute:
 1 if anagrams else 0,  # hit_found = 0
 ```
 
-**In compound_analysis.py (lines 67-71):**
+**In anagram_analysis.py (lines 67-71):**
 ```python
 has_anagram_hits = summary.get("anagram_hits", 0) > 0
 
@@ -334,7 +334,7 @@ if not has_anagram_hits:
 
 **All compound candidates (Cohort 2 and 3) are processed by the evidence stage.**
 
-**In compound_analysis.py (lines 102-123):**
+**In anagram_analysis.py (lines 102-123):**
 ```python
 evidence_analyzer = EvidenceAnalyzer()
 for record in compound_candidates:
@@ -388,20 +388,20 @@ evidence = AnagramEvidence(
 
 ## Compound Analysis Stage
 
-**Called from:** `compound_analysis.py` (lines 130-167)
+**Called from:** `anagram_analysis.py` (lines 130-167)
 
-**Implemented in:** `compound_wordplay_analyzer.py`
+**Implemented in:** `compound_wordplay_analyzer.py` (analysis) and `explanation_builder.py` (presentation)
 
 ### Entry Point
 
-**In compound_analysis.py:**
+**In anagram_analysis.py:**
 ```python
 enhanced_cases = self.explanation_builder.enhance_pipeline_data(evidence_enhanced_results)
 explanations = self.explanation_builder.build_explanations(enhanced_cases)
 save_stage('compound', run_id, compound_explanations)
 ```
 
-### ExplanationSystemBuilder (lines 1332-1386)
+### ExplanationSystemBuilder (in explanation_builder.py)
 
 **Wrapper class that calls `CompoundWordplayAnalyzer.analyze_case()` for each case.**
 
@@ -413,7 +413,7 @@ def enhance_pipeline_data(self, evidence_enhanced_cases):
     return enhanced
 ```
 
-### CompoundWordplayAnalyzer.analyze_case() (lines 379-513)
+### CompoundWordplayAnalyzer.analyze_case() (in compound_wordplay_analyzer.py)
 
 **The core method that builds complete word attribution and explanations.**
 
@@ -614,10 +614,10 @@ stage_input → stage_definition → stage_anagram → stage_evidence → stage_
 | 3 | ~~Indicator search scope too broad~~ | compound_wordplay_analyzer.py | **✓ RESOLVED** |
 | 4 | ~~Pass 3 inserts inferred indicators into database~~ | compound_wordplay_analyzer.py | **✓ RESOLVED** |
 | 5 | Definition window determination affects indicator selection | compound_wordplay_analyzer.py | Lower priority |
-| 6 | Monolith file with mixed concerns | compound_wordplay_analyzer.py | Architectural |
-| 7 | compound_analysis.py is misnamed and mislocated | compound_analysis.py | Organisational |
+| 6 | ~~Monolith file with mixed concerns~~ | compound_wordplay_analyzer.py | **✓ RESOLVED** |
+| 7 | ~~compound_analysis.py is misnamed and mislocated~~ | anagram_analysis.py | **✓ RESOLVED** |
 
-*Note: Original Deficiencies 1-2 (add indicator detection to brute force) were superseded. Deficiencies 3-4 have been resolved.*
+*Note: Original Deficiencies 1-2 (add indicator detection to brute force) were superseded. Deficiencies 3, 4, 6, and 7 have been resolved.*
 
 ---
 
@@ -660,13 +660,49 @@ if norm_letters(word) in def_words_lower:
 
 ---
 
+### ✓ Resolved: Deficiency 6 - File split (analysis/presentation)
+
+**Original file:** `compound_wordplay_analyzer.py` (1494 lines)
+
+**The problem was:** The file combined two distinct concerns - analysis and presentation.
+
+**The fix:** Split into two files:
+
+**compound_wordplay_analyzer.py** (1262 lines) - Analysis
+- Data classes (WordplayType, IndicatorMatch, SubstitutionMatch, WordRole)
+- DatabaseLookup
+- CompoundSolver
+- CompoundWordplayAnalyzer with analysis methods only
+
+**explanation_builder.py** (388 lines) - Presentation
+- ExplanationBuilder class with:
+  - `build_explanation()` - formula and breakdown building
+  - `assess_quality()` - quality assessment
+  - `build_fallback()` - fallback handling
+- ExplanationSystemBuilder wrapper
+
+---
+
+### ✓ Resolved: Deficiency 7 - File rename and relocation
+
+**Original:** `solver/solver_engine/compound_analysis.py`
+
+**New:** `solver/wordplay/anagram/anagram_analysis.py`
+
+**The fix:**
+1. Renamed to reflect its role as anagram track orchestrator
+2. Moved to `solver/wordplay/anagram/` to sit with related files
+3. Updated imports to use fully qualified paths
+
+---
+
 ## REMAINING DEFICIENCIES
 
 ### Deficiency 5: Definition window determination affects indicator selection
 
 **File:** `compound_wordplay_analyzer.py`
 
-**Function:** `_get_definition_window()` (lines 663-680)
+**Function:** `_get_definition_window()`
 
 **Problem:** Definition window is determined by which window from definition stage contained the answer. But:
 
@@ -674,149 +710,43 @@ if norm_letters(word) in def_words_lower:
 2. **First matching window is used** - Not necessarily the correct/complete definition
 3. **Affects remaining words calculation** - Wrong definition window means wrong remaining words
 
----
-
-### Deficiency 6: compound_wordplay_analyzer.py is a monolith with mixed concerns
-
-**File:** `compound_wordplay_analyzer.py` (1494 lines)
-
-**Problem:** The file combines two distinct concerns:
-1. **Analysis** - finding indicators, solving compound wordplay, determining word roles
-2. **Presentation** - building explanations, assessing quality, formatting output
-
-**Current structure:**
-
-| Lines | Component | Concern |
-|-------|-----------|---------|
-| 33-75 | Data classes | Shared |
-| 75-180 | DatabaseLookup | Analysis |
-| 182-298 | CompoundSolver | Analysis |
-| 300-1138 | CompoundWordplayAnalyzer (analysis methods) | Analysis |
-| 1140-1330 | CompoundWordplayAnalyzer (explanation methods) | Presentation |
-| 1332-1387 | ExplanationSystemBuilder | Presentation |
-
-**Methods by concern:**
-
-| Analysis (stay in compound_wordplay_analyzer.py) | Presentation (move to explanation_builder.py) |
-|--------------------------------------------------|-----------------------------------------------|
-| `analyze_case()` | `_build_explanation()` |
-| `_find_anagram_indicator()` | `_assess_quality()` |
-| `_get_definition_window()` | `_build_fallback()` |
-| `_analyze_remaining_words()` | ExplanationSystemBuilder |
-| `_handle_deletion_compound()` | |
-| `_try_reduced_fodder()` | |
-| `_classify_remaining_as_indicators()` | |
-
-**Proposed refactoring:**
-
-**File 1: `compound_wordplay_analyzer.py`** (Analysis)
-- Data classes
-- DatabaseLookup
-- CompoundSolver
-- CompoundWordplayAnalyzer with analysis methods only
-- Output: word_roles, compound_solution, indicator, fodder, definition
-
-**File 2: `explanation_builder.py`** (Presentation)
-- `build_explanation()` - formula and breakdown building
-- `assess_quality()` - quality assessment
-- `build_fallback()` - fallback handling
-- ExplanationSystemBuilder wrapper
-- Output: formula, breakdown, quality rating
-
-**New table: `stage_explanation`**
-
-| Column | Description |
-|--------|-------------|
-| clue_id | Foreign key |
-| clue_text | The clue |
-| likely_answer | From compound stage |
-| formula | e.g., "anagram(TARGETS) + Y = STRATEGY" |
-| breakdown | JSON of word-by-word explanation |
-| quality | solved, high, medium, low, none |
-| fully_resolved | 1 if all words accounted for |
-
-**Pipeline after refactoring:**
-```
-stage_definition → stage_anagram → stage_evidence → stage_compound → stage_explanation
-```
-
-**Benefits:**
-1. Separation of concerns - analysis vs presentation
-2. Smaller, more maintainable files
-3. New persistence point for debugging
-4. Explanation building can be modified without affecting analysis
-
----
-
-### Deficiency 7: compound_analysis.py is misnamed and mislocated
-
-**File:** `solver/solver_engine/compound_analysis.py`
-
-**Problem:**
-1. The file is named "compound_analysis" but it orchestrates the entire anagram track
-2. It resides in solver_engine/ but belongs with other anagram files
-3. It was created as a temporary analysis file but has become permanent
-
-**Current location:** `solver/solver_engine/compound_analysis.py`
-
-**Required change:** Rename to `anagram_analysis.py` and move to `solver/wordplay/anagram/`
-
-**Files in solver/wordplay/anagram/ after reorganisation:**
-
-| File | Purpose |
-|------|---------|
-| `anagram_stage.py` | Brute force + anagram stage hypothesis generation |
-| `anagram_evidence_system.py` | Indicator detection, contiguity rules, evidence scoring |
-| `anagram_analysis.py` | **Orchestration: evidence analysis, compound solving, explanation building** |
-| `compound_wordplay_analyzer.py` | Compound wordplay solving (analysis methods) |
-| `explanation_builder.py` | Explanation building (presentation methods) - after Deficiency 6 fix |
+**Status:** Lower priority - the indicator search fix (Deficiency 3) addresses the main symptom.
 
 ---
 
 ## CORRECTIVE ACTIONS SUMMARY
 
-The deficiencies documented above serve as the worklist. Each action corresponds to a deficiency:
-
-| Action | Deficiency | File | Status |
-|--------|------------|------|--------|
-| 1 | Deficiency 3 | compound_wordplay_analyzer.py | **✓ DONE** - Search only remaining words |
-| 2 | Deficiency 4 | compound_wordplay_analyzer.py | **✓ DONE** - Removed database insertion |
-| 3 | Deficiency 5 | compound_wordplay_analyzer.py | Pending - Improve window selection |
-| 4 | (Superseded) | anagram_evidence_system.py | N/A |
-| 5 | Deficiency 6 | compound_wordplay_analyzer.py | Pending - Split file into analysis/presentation |
-| 6 | Deficiency 7 | compound_analysis.py | Pending - Rename to anagram_analysis.py, relocate |
+| Action | Deficiency | Status |
+|--------|------------|--------|
+| 1 | Deficiency 3 - Indicator search scope | **✓ DONE** |
+| 2 | Deficiency 4 - Database pollution | **✓ DONE** |
+| 3 | Deficiency 5 - Definition window selection | Pending (lower priority) |
+| 4 | Deficiency 6 - Split file | **✓ DONE** |
+| 5 | Deficiency 7 - Rename/relocate | **✓ DONE** |
 
 ### Completed
 
-**Action 1 (Deficiency 3) ✓** - Indicator search now skips definition words. Verified with "Long-term plan targets unusual year (8)".
+**Deficiency 3 ✓** - Indicator search now skips definition words. Verified with "Long-term plan targets unusual year (8)".
 
-**Action 2 (Deficiency 4) ✓** - Database insertion of inferred indicators removed.
+**Deficiency 4 ✓** - Database insertion of inferred indicators removed.
+
+**Deficiency 6 ✓** - Split `compound_wordplay_analyzer.py` into analysis (1262 lines) and presentation (388 lines in `explanation_builder.py`).
+
+**Deficiency 7 ✓** - Renamed `compound_analysis.py` to `anagram_analysis.py` and moved to `solver/wordplay/anagram/`.
 
 ### Remaining
 
-**Action 5 (Deficiency 6)** - Architectural: Split the monolith for maintainability.
+**Deficiency 5** - Lower priority: Definition window selection when multiple windows match.
 
-**Action 6 (Deficiency 7)** - Organisational: Rename and relocate the orchestration file.
+### Files in solver/wordplay/anagram/
 
-**Action 3 (Deficiency 5)** - Lower priority: May improve edge cases.
-
----
-
-## File Reorganisation: compound_analysis.py → anagram_analysis.py
-
-*See Deficiency 7 for full details.*
-
-**Summary:** Rename `solver/solver_engine/compound_analysis.py` to `solver/wordplay/anagram/anagram_analysis.py`
-
-### Files in solver/wordplay/anagram/ after reorganisation
-
-| File | Purpose |
-|------|---------|
-| anagram_stage.py | Brute force + anagram stage hypothesis generation |
-| anagram_evidence_system.py | Indicator detection, contiguity rules, evidence scoring |
-| anagram_analysis.py | **Orchestration: evidence analysis, compound solving, explanation building** |
-| compound_wordplay_analyzer.py | Compound wordplay solving (analysis methods) |
-| explanation_builder.py | Explanation building (presentation methods) - after Deficiency 6 |
+| File | Lines | Purpose |
+|------|-------|---------|
+| anagram_stage.py | - | Brute force + anagram stage hypothesis generation |
+| anagram_evidence_system.py | - | Indicator detection, contiguity rules, evidence scoring |
+| anagram_analysis.py | 341 | **Orchestration: evidence analysis, compound solving, explanation building** |
+| compound_wordplay_analyzer.py | 1262 | Compound wordplay analysis (analysis methods) |
+| explanation_builder.py | 388 | Explanation building (presentation methods) |
 
 ---
 
@@ -974,28 +904,26 @@ anagram_stage.py: generate_anagram_hypotheses()
 
 ---
 
-## KNOWN ISSUE: Indicator Not Populated
+## RESOLVED: Indicator Detection Issue
 
-**Problem:** When `_generate_anagram_hypotheses_original()` finds an exact match, it does NOT populate `indicator_words` in the hypothesis.
+**Original problem:** When `_generate_anagram_hypotheses_original()` finds an exact match, it does NOT populate `indicator_words` in the hypothesis. Downstream, `compound_wordplay_analyzer.py` received empty `indicator_words` and fell back to heuristic indicator detection, which could pick the wrong word.
 
-**Impact:** Downstream, `compound_wordplay_analyzer.py` receives empty `indicator_words` and falls back to heuristic indicator detection, which can pick the wrong word (e.g., "plan" instead of "unusual").
-
-**Example:**
+**Example that was failing:**
 - Clue: "Long-term plan targets unusual year (8)"
 - Answer: STRATEGY
 - Fodder: "targets" (7 letters) + Y from "year" (1 letter)
 - Correct indicator: "unusual"
-- System incorrectly picks: "plan" (because it's adjacent to fodder and not in definition)
+- System incorrectly picked: "plan" (because it was adjacent to fodder)
 
-**Fix needed:** Add indicator detection to `_generate_anagram_hypotheses_original()`.
+**Resolution:** Rather than adding indicator detection to brute force, we constrained the indicator search in `_find_anagram_indicator()` to skip both fodder AND definition words. Since we know definition and fodder by compound stage, the indicator MUST be in the remaining words.
+
+**Status:** ✓ Fixed and verified.
 
 ---
 
 ---
 
-## File 8: `solver/solver_engine/compound_analysis.py`
-
-**⚠️ TO BE RENAMED:** This file will be renamed to `anagram_analysis.py` and moved to `solver/wordplay/anagram/` (see Action 6 in Corrective Actions).
+## File 8: `solver/wordplay/anagram/anagram_analysis.py`
 
 **Purpose:** Orchestrates the evidence and compound analysis phases for the anagram track.
 
@@ -1015,10 +943,10 @@ anagram_stage.py: generate_anagram_hypotheses()
    - Saves to `stage_compound` table
 
 **Imports:**
-- `run_pipeline_probe` from pipeline_simulator.py
-- `ExplanationSystemBuilder` from compound_wordplay_analyzer.py
-- `EvidenceAnalyzer` from evidence_analysis.py
-- `save_stage` from pipeline_persistence.py
+- `run_pipeline_probe` from solver.solver_engine.pipeline_simulator
+- `ExplanationSystemBuilder` from solver.wordplay.anagram.explanation_builder
+- `EvidenceAnalyzer` from solver.solver_engine.evidence_analysis
+- `save_stage` from data.pipeline_persistence
 
 ---
 
@@ -1046,33 +974,44 @@ anagram_stage.py: generate_anagram_hypotheses()
 
 ## File 10: `solver/wordplay/anagram/compound_wordplay_analyzer.py`
 
-**Purpose:** Builds complete explanations with word roles, indicator detection, and substitution lookups.
+**Purpose:** Analyzes compound wordplay with word roles, indicator detection, and substitution lookups.
 
 **Key classes:**
 - `DatabaseLookup` - queries indicators and wordplay tables
 - `CompoundSolver` - solves insertion, container, deletion, reversal operations
 - `CompoundWordplayAnalyzer` - main analyzer
-- `ExplanationSystemBuilder` - wrapper for pipeline compatibility
 
 **Key method:** `CompoundWordplayAnalyzer.analyze_case(case)`
 
-**What it does (lines 379-513):**
+**What it does:**
 1. Gets `scored_candidates` from evidence analysis
 2. Takes top candidate as `likely_answer` (NOT the database answer)
 3. Extracts `fodder_words`, `fodder_letters` from evidence
-4. **Finds anagram indicator** (lines 419-428):
-   - First tries to get `indicator_words` from evidence object
-   - **FALLBACK:** If empty, calls `_find_anagram_indicator()` (THIS IS THE BUG)
+4. **Finds anagram indicator** - calls `_find_anagram_indicator()`
 5. Builds `word_roles` list - tracks each word's role (definition, fodder, indicator, link, etc.)
 6. Analyzes remaining words for substitutions using database
-7. Builds explanation with formula and breakdown
+7. Calls `ExplanationBuilder` (from explanation_builder.py) to build explanation
 
-**`_find_anagram_indicator()` method (lines 515-632):**
-- First pass: looks for two-word indicators in database
-- Second pass: looks for single-word indicators in database
-- **Third pass (FALLBACK):** Infers indicator by proximity to fodder
-  - Picks word adjacent to fodder that's NOT in definition
-  - **THIS IS WHERE "plan" GETS INCORRECTLY PICKED**
+**`_find_anagram_indicator()` method (lines 515-640):**
+- **✓ FIXED:** Now skips definition words when searching for indicators
+- First pass: looks for two-word indicators in database (excluding definition/fodder)
+- Second pass: looks for single-word indicators in database (excluding definition/fodder)
+- Third pass (FALLBACK): Infers indicator by proximity to fodder
+
+---
+
+## File 11: `solver/wordplay/anagram/explanation_builder.py`
+
+**Purpose:** Builds explanations, assesses quality, formats output (presentation layer).
+
+**Key classes:**
+- `ExplanationBuilder` - builds formulas and breakdowns
+- `ExplanationSystemBuilder` - wrapper for pipeline compatibility
+
+**Key methods:**
+- `build_explanation()` - creates formula and word-by-word breakdown
+- `assess_quality()` - rates explanation as solved/high/medium/low/none
+- `build_fallback()` - handles cases with no evidence
 
 ---
 
@@ -1093,60 +1032,42 @@ anagram_stage.py: _generate_anagram_hypotheses_original()
     → Tries all word combinations
     → Finds: ["targets"] letters match STRATEGY
     → Returns: fodder_words=["targets"], unused_words=["Long-term","plan","unusual","year"]
-    → DOES NOT RETURN: indicator_words (field missing!)
+    → Note: indicator_words not populated by brute force
     ↓
 evidence_analysis.py: apply_evidence_scoring()
-    → Receives hypothesis without indicator_words
-    → Passes it through unchanged
+    → Receives hypothesis, ranks candidates
     ↓
 compound_wordplay_analyzer.py: analyze_case()
-    → Checks evidence.indicator_words → EMPTY
-    → Falls back to _find_anagram_indicator() heuristic
-    → Heuristic: find word adjacent to fodder, not in definition
-    → "plan" is adjacent to "targets"
-    → System thinks "Long-term" alone is definition (wrong)
-    → PICKS "plan" AS INDICATOR (WRONG!)
+    → Gets definition_window = "Long-term plan"
+    → Gets fodder_words = ["targets"]
+    → Calls _find_anagram_indicator()
+    ↓
+_find_anagram_indicator() ✓ FIXED
+    → Searches remaining words only: ["unusual", "year"]
+    → Skips definition words: ["Long-term", "plan"]
+    → Finds "unusual" in indicators database
+    → Returns "unusual" as indicator ✓
+    ↓
+explanation_builder.py: build_explanation()
+    → Builds formula and breakdown
     ↓
 OUTPUT:
     Formula: anagram(TARGETS) + Y (year) = STRATEGY
-    Breakdown: "plan" = anagram indicator ← WRONG!
-    Should be: "unusual" = anagram indicator
+    Breakdown:
+      • "Long-term" = definition for STRATEGY
+      • "plan" = definition for STRATEGY
+      • "targets" = anagram fodder
+      • "unusual" = anagram indicator ✓
+      • "year" = Y (abbreviation)
 ```
 
 ---
 
-## THE BUG: Indicator Detection Gap
+## HISTORICAL: The Indicator Detection Bug (Now Fixed)
 
-**Root cause:** `_generate_anagram_hypotheses_original()` in anagram_stage.py is pure letter matching. It finds THAT an anagram exists but never identifies WHICH word is the indicator.
+**Root cause was:** `_find_anagram_indicator()` searched ALL clue words for indicators, including definition words. When "plan" appeared before "unusual" in the clue, it could be incorrectly selected.
 
-**The problem in detail:**
+**The fix:** `_find_anagram_indicator()` now skips both fodder AND definition words when searching for indicators. Since we know the definition and fodder by the time compound stage runs, the indicator MUST be in the remaining words.
 
-1. `_generate_anagram_hypotheses_original()` tries all word combinations
-2. It finds: fodder_words=["targets"] matches candidate STRATEGY
-3. It returns this match with `unused_words=["Long-term", "plan", "unusual", "year"]`
-4. **It does NOT identify that "unusual" is the indicator**
-5. The hypothesis has no `indicator_words` field
-
-6. Later, `compound_wordplay_analyzer.py` receives this hypothesis
-7. It checks for `indicator_words` - finds nothing
-8. Falls back to `_find_anagram_indicator()` heuristic
-9. Heuristic picks word adjacent to fodder that's not in definition
-10. "plan" is adjacent to "targets" (the fodder)
-11. "plan" is not in the definition "Long-term plan" (incorrectly determined)
-12. **System incorrectly picks "plan" as indicator**
-
-**Why "unusual" should be picked:**
-- "unusual" IS in the anagram indicators database
-- "unusual" is adjacent to "year" which contributes Y
-- A proper indicator lookup would find it
-
-**Example failure:**
-- Clue: "Long-term plan targets unusual year (8)"
-- Correct parse: "Long-term plan" = definition, "unusual" = indicator, "targets" + Y = fodder → STRATEGY
-- System parse: "Long-term" = definition, "plan" = indicator (WRONG), "targets" = fodder → STRATEGY
-
-**Fix needed:**
-When `_generate_anagram_hypotheses_original()` finds an exact match, it should also:
-1. Query the indicators database for anagram indicators among the unused words
-2. Identify which unused word is the indicator
+**Verified with:** "Long-term plan targets unusual year (8)" - now correctly identifies "unusual" as the anagram indicator.
 3. Include `indicator_words` in the returned hypothesis
