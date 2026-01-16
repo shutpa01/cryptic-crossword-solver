@@ -19,7 +19,7 @@ import os
 sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
 
 # Import the original pipeline simulator (maintaining sanctity)
-from pipeline_simulator import run_pipeline_probe, MAX_CLUES, WORDPLAY_TYPE
+from solver.solver_engine.pipeline_simulator import run_pipeline_probe, MAX_CLUES, WORDPLAY_TYPE
 from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
 
 # Evidence scoring configuration
