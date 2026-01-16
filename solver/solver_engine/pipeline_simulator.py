@@ -49,7 +49,7 @@ except ImportError:
 # SIMULATOR CONFIGURATION
 # ==============================
 
-MAX_CLUES = 500
+MAX_CLUES = 20
 WORDPLAY_TYPE = "anagram"  # e.g. "all", "anagram", "lurker", "dd"
 ONLY_MISSING_DEFINITION = False  # show only clues where answer NOT in def candidates
 MAX_DISPLAY = 10  # max number of clues to print

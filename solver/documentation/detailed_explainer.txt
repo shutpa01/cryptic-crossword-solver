@@ -1,0 +1,1181 @@
+# CRYPTIC SOLVER PIPELINE DOCUMENTATION
+
+## Overview
+
+This document describes the architecture of the cryptic crossword solver pipeline, tracing the flow from clue input through to solution explanation.
+
+---
+
+## File 1: `solver/solver_engine/resources.py`
+
+**Purpose:** Utility functions and database access used by all other pipeline stages.
+
+**Key functions:**
+- `norm_letters(s)` - strips all non-alpha characters, lowercases (e.g., "LONG-TERM" → "longterm")
+- `clean_key(s)` - normalizes for graph lookup keys
+- `clean_val(s)` - normalizes for graph lookup values
+- `parse_enum(en)` - extracts total letter count from enumeration (e.g., "(2,5)" → 7)
+- `connect_db()` - connects to the main database
+- `load_graph(conn)` - loads the definition→answer and synonym graph from database tables `definition_answers_augmented` and `synonyms_pairs`
+
+**The graph** is a dictionary where keys are normalized definition phrases and values are lists of possible answers.
+
+---
+
+## File 2: `solver/definition/definition_engine.py`
+
+**Purpose:** Generates definition windows and finds candidate answers from the graph.
+
+**Key function:** `definition_candidates(clue_text, enumeration, graph)`
+
+**What it does:**
+1. Calls `generate_definition_windows(clue_text)` to create all possible definition phrases
+2. For each window, looks it up in the graph (with article variants "a", "an", "the")
+3. Returns all candidates that match any definition window
+
+**`generate_definition_windows(clue_text)`:**
+- Definitions are always at the START or END of a cryptic clue
+- Creates windows of increasing size from both ends:
+  - "Long-term", "Long-term plan", "Long-term plan targets", etc.
+  - "year", "unusual year", "targets unusual year", etc.
+- Also handles possessive variants ("Ray's" → "rays")
+
+**Returns:**
+```python
+{
+    "definition_windows": [...],  # All possible definition phrases
+    "candidates": [...],          # All answers found in graph
+    "support": {...}              # Which window(s) produced each candidate
+}
+```
+
+---
+
+## File 3: `solver/definition/definition_engine_edges.py`
+
+**Purpose:** Wrapper around definition_engine.py that adds edge-based expansion.
+
+**Key function:** `definition_candidates(clue_text, enumeration, graph)`
+
+**What it does:**
+1. Calls the base `definition_candidates` from definition_engine.py
+2. Adds `has_separator` flag (detects comma, semicolon, colon, em dash)
+3. Does additional article-variant lookups for more candidates
+
+**This is the function called by pipeline_simulator.py** (line 389).
+
+---
+
+## File 4: `solver/solver_engine/pipeline_simulator.py`
+
+**Purpose:** Orchestrates the full pipeline, running clues through all stages.
+
+**Definition Stage (lines 388-449):**
+1. Calls `definition_candidates()` from definition_engine_edges.py
+2. Builds `flat_candidates` list filtered by enumeration length
+3. Checks if the correct answer is among candidates (`definition_answer_present`)
+4. **GATE:** If answer NOT in candidates, skip this clue (cannot solve)
+5. Saves to `stage_definition` table via `save_stage('definition', ...)`
+
+**Anagram Stage (lines 452-456):**
+- Calls `generate_anagram_hypotheses()` with clue_text, enumeration, and candidates
+- (Documentation continues below)
+
+---
+
+## File 5: `solver/wordplay/anagram/anagram_stage.py`
+
+**Purpose:** Finds anagram matches between clue words and candidates.
+
+**Key function:** `generate_anagram_hypotheses(clue_text, enumeration, candidates)`
+
+**Contains two methods:**
+1. **Brute force** - `_generate_anagram_hypotheses_original()` - tries all word combinations, no indicator awareness
+2. **Anagram stage** - `_generate_anagram_hypotheses_evidence()` - uses indicators from database to find fodder
+
+**Flow:**
+1. First calls brute force
+2. If no match found, falls back to anagram stage
+
+---
+
+### Brute Force: `_generate_anagram_hypotheses_original()` (lines 74-142)
+
+**This is pure letter matching with NO cryptic grammar awareness.**
+
+**Algorithm:**
+1. **Filter candidates** (lines 84-88): Keep only candidates matching enumeration length
+2. **Tokenize clue** (lines 95-99): Split clue into words, keep original form
+3. **Create letter counters** (line 101): For each word, count its letters
+4. **Try ALL combinations** (lines 105-140):
+   - For r = 1 to len(words): try all r-word combinations
+   - Uses `itertools.combinations` - words can be NON-CONTIGUOUS
+   - For each combination, sum the letter counts
+   - If total letters ≠ enumeration, skip
+   - If letters match a candidate exactly, record as hypothesis
+5. **Stage B hygiene** (lines 120-123): Reject if candidate appears verbatim in clue
+
+**What it returns:**
+```python
+{
+    "answer": candidate,           # The matched candidate
+    "fodder_words": used_words,    # Which clue words form the anagram
+    "fodder_letters": "...",       # The letters (sorted)
+    "unused_words": unused_words,  # Remaining clue words
+    "candidate_source": candidate,
+    "solve_type": "anagram_exact",
+    "confidence": "provisional"
+    # NOTE: NO indicator_words field!
+}
+```
+
+**Critical characteristics:**
+- **No indicator detection** - does not look for "unusual", "mixed", "drunk", etc.
+- **No contiguity requirement** - fodder words can be anywhere in clue
+- **No proximity requirement** - fodder need not be adjacent to anything
+- **Pure letter matching** - if letters match, it's a hit
+- **Returns ALL matches** - not just the first one
+
+**Example:**
+- Clue: "Long-term plan targets unusual year (8)"
+- It tries: ["Long-term"], ["plan"], ["targets"], ["unusual"], ["year"], ["Long-term", "plan"], ["Long-term", "targets"], ... all combinations
+- When it tries ["targets"], letters = AEEGRRST (sorted), doesn't match STRATEGY
+- When it tries ["targets", "y"] (from "year"), letters would need substitution handling
+- Actually the match is found some other way...
+
+**The key point:** This function finds THAT an anagram exists, but provides no information about WHICH word in the clue is the indicator. The indicator information is lost/never captured.
+
+---
+
+### Anagram Stage: `_generate_anagram_hypotheses_evidence()` (lines 145-209)
+
+**Called only when brute force finds nothing.**
+
+**Uses indicators from database to find fodder with proximity and contiguity rules.**
+
+**Flow:**
+1. Line 151: Gets evidence detector instance
+2. Line 164-169: Calls `detector.analyze_clue_for_anagram_evidence()`
+3. Line 187-205: Converts evidence objects to hypothesis format
+4. **Line 201: Includes `indicator_words`** from evidence object
+
+**What it returns:**
+```python
+{
+    "answer": evidence.candidate,
+    "fodder_words": evidence.fodder_words,
+    "fodder_letters": evidence.fodder_letters,
+    "unused_words": unused_words,
+    "solve_type": "anagram_evidence_exact",  # or partial, deletion, insertion
+    "confidence": evidence.confidence,
+    "evidence_type": evidence.evidence_type,
+    "score_boost": ...,
+    "needed_letters": ...,
+    "excess_letters": ...,
+    # INDICATOR DATA - POPULATED!
+    "indicator_words": evidence.indicator_words,  # ← FROM DATABASE
+    "indicator_position": evidence.indicator_position,
+    "link_words": evidence.link_words,
+    "remaining_words": evidence.remaining_words
+}
+```
+
+---
+
+## The Three Cohorts After Definition Stage
+
+### Cohort 1: No definition match
+- Answer not in candidates
+- Skipped at gate (pipeline_simulator.py lines 444-449)
+- No anagram processing
+- Not saved to stage_anagram
+
+### Cohort 2: Brute force hits
+- `_generate_anagram_hypotheses_original()` finds exact letter match
+- Returns hypothesis **WITHOUT indicator_words**
+- Anagram stage bypassed (line 55-56: `if original_hypotheses: return`)
+- Saved to stage_anagram with fodder_words, unused_words, but no indicator
+
+### Cohort 3: Anagram stage hits (no brute force hits)
+- `_generate_anagram_hypotheses_original()` returns empty
+- Falls back to `_generate_anagram_hypotheses_evidence()` (anagram stage)
+- Anagram stage process:
+  - `detect_wordplay_indicators()` finds indicators from database
+  - `test_anagram_evidence()` builds evidence with indicator attribution
+  - Returns hypothesis **WITH indicator_words populated**
+- Saved to stage_anagram with full indicator information
+
+---
+
+## Anagram Stage: What It Does For Cohort 3
+
+**Entry point:** `_generate_anagram_hypotheses_evidence()` in anagram_stage.py
+
+**Calls:** `detector.analyze_clue_for_anagram_evidence()` in anagram_evidence_system.py
+
+### The Four Rules Enforced
+
+From docstring (lines 13-17):
+
+1. **Indicator detection** - finds indicator from database (single word first, then two-word if needed)
+2. **Proximity** - fodder must be adjacent to indicator (one link word allowed between)
+3. **Contiguity** - fodder words must be next to each other in the clue
+4. **Whole words** - fodder is complete words, not cherry-picked letters
+
+### The Process
+
+**Step 1: Find indicators (line 813)**
+```
+detect_wordplay_indicators(clue_text)
+```
+- Tokenizes clue
+- Checks each word against `anagram_indicators_single` set (loaded from database)
+- If no single-word match, checks two-word combinations against `anagram_indicators_two_word`
+- Returns indicator words WITH their positions in the clue
+
+**Step 2: Expand from indicators to find fodder**
+```
+get_contiguous_fodder_sequences(clue_text, indicators)
+```
+- For each indicator found, expands left and right
+- Collects contiguous words adjacent to indicator
+- Allows skipping ONE link word at the boundary
+- Returns `ContiguousFodder` objects containing:
+  - `words` - the fodder words
+  - `positions` - their positions in the clue
+  - `letters` - the combined letters
+  - `indicator` - the indicator that anchors this fodder
+  - `side` - 'left' or 'right' of indicator
+
+**Step 3: Test fodder against candidates (lines 612-750)**
+
+For each ContiguousFodder sequence:
+
+**Exact match test (lines 612-647):**
+```python
+if self.is_anagram(candidate_letters, fodder_letters):
+    # Letters match exactly
+    return AnagramEvidence(
+        evidence_type="exact",
+        indicator_words=list(fodder.indicator.words),  # FROM THE INDICATOR
+        ...
+    )
+```
+
+**Partial match test (lines 649-750):**
+```python
+can_contribute, ratio, remaining = self.can_contribute_letters(candidate, fodder)
+if can_contribute:
+    # Fodder provides some letters, remaining_letters needed from elsewhere
+    # Score based on how much is explained
+    return AnagramEvidence(
+        evidence_type="partial",
+        indicator_words=list(fodder.indicator.words),
+        needed_letters=remaining,
+        ...
+    )
+```
+
+### Key Difference: Brute Force vs Anagram Stage
+
+| Aspect | Brute Force | Anagram Stage |
+|--------|-------------|---------------|
+| Word selection | Any combination | Adjacent to indicator only |
+| Contiguity | Not required | Required |
+| Indicator detection | None | From database |
+| Returns indicator_words | No | Yes |
+| Partial matches | No | Yes |
+
+---
+
+### Cohort 4: No anagram evidence
+- `_generate_anagram_hypotheses_original()` returns empty
+- `_generate_anagram_hypotheses_evidence()` also returns empty
+- `generate_anagram_hypotheses()` returns empty list (line 70-71)
+- **Still saved to stage_anagram** with `hit_found = 0` and empty fields
+- **Filtered out by compound_analysis.py** - not processed further
+
+**In pipeline_simulator.py:**
+- `record["anagrams"] = []` (empty list)
+- `record["summary"]["anagram_hits"] = 0`
+- Record still appended to results and saved
+
+**In pipeline_persistence.py (line 266):**
+```python
+1 if anagrams else 0,  # hit_found = 0
+```
+
+**In compound_analysis.py (lines 67-71):**
+```python
+has_anagram_hits = summary.get("anagram_hits", 0) > 0
+
+if not has_anagram_hits:
+    return False  # FILTERED OUT - not a compound candidate
+```
+
+**Result:** These clues exit the anagram track entirely. They are recorded in the database for analysis but receive no further anagram/compound processing.
+
+---
+
+## Summary: The Four Cohorts After Anagram Stage
+
+| Cohort | Description | Indicator Detected? | Further Processing? |
+|--------|-------------|---------------------|---------------------|
+| 1 | No definition match | N/A | Skipped at gate |
+| 2 | Brute force hit | **NO** | Yes - compound analysis |
+| 3 | Anagram stage hit | **YES** | Yes - compound analysis |
+| 4 | No anagram evidence | N/A | Filtered out |
+
+**The problem is Cohort 2:** These clues have anagram hits and proceed to compound analysis, but they lack `indicator_words` because brute force doesn't detect indicators.
+
+---
+
+## Evidence Stage Processing
+
+**All compound candidates (Cohort 2 and 3) are processed by the evidence stage.**
+
+**In compound_analysis.py (lines 102-123):**
+```python
+evidence_analyzer = EvidenceAnalyzer()
+for record in compound_candidates:
+    enhanced_record = evidence_analyzer.apply_evidence_scoring(record)
+    evidence_enhanced_results.append(enhanced_record)
+
+# ---- SAVE EVIDENCE STAGE ----
+save_stage('evidence', run_id, evidence_enhanced_results)
+```
+
+**In evidence_analysis.py (lines 75-80):**
+```python
+ranking_results = self.detector.analyze_and_rank_anagram_candidates(
+    clue_text=clue_text,
+    candidates=candidates,
+    answer=answer,
+    debug=debug
+)
+```
+
+**In anagram_evidence_system.py (lines 955-957):**
+```python
+from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
+hypotheses = generate_anagram_hypotheses(clue_text, enumeration_num, candidates)
+```
+
+**ORIGINAL DEFICIENCY 1:** The evidence stage calls `generate_anagram_hypotheses()` AGAIN, which re-runs brute force. For Cohort 2, brute force finds the same hit again, still without `indicator_words`.
+
+**In anagram_evidence_system.py (lines 984-994):**
+```python
+evidence = AnagramEvidence(
+    candidate=hyp.get("answer", ""),
+    fodder_words=hyp.get("fodder_words", []),
+    fodder_letters=hyp.get("fodder_letters", ""),
+    evidence_type=hyp.get("evidence_type", hyp.get("solve_type", "exact")),
+    confidence=confidence,
+    excess_letters=hyp.get("excess_letters", ""),
+    needed_letters=hyp.get("needed_letters", ""),
+    unused_clue_words=hyp.get("unused_words", [])
+    # NOTE: indicator_words NOT included
+)
+```
+
+**ORIGINAL DEFICIENCY 2:** Even if `indicator_words` existed in the hypothesis, it is NOT transferred to the `AnagramEvidence` object.
+
+**Result:** Brute force hits are saved to `stage_evidence`, but without indicator information.
+
+**SUPERSEDED:** The original plan was to add indicator detection to brute force and transfer indicator_words through the pipeline. This has been revised. The new approach is to constrain the indicator search in compound stage - since we already have definition + fodder by that point, the indicator MUST be in the remaining words. See "CORRECTIVE ACTIONS SUMMARY" for the current plan.
+
+---
+
+## Compound Analysis Stage
+
+**Called from:** `compound_analysis.py` (lines 130-167)
+
+**Implemented in:** `compound_wordplay_analyzer.py`
+
+### Entry Point
+
+**In compound_analysis.py:**
+```python
+enhanced_cases = self.explanation_builder.enhance_pipeline_data(evidence_enhanced_results)
+explanations = self.explanation_builder.build_explanations(enhanced_cases)
+save_stage('compound', run_id, compound_explanations)
+```
+
+### ExplanationSystemBuilder (lines 1332-1386)
+
+**Wrapper class that calls `CompoundWordplayAnalyzer.analyze_case()` for each case.**
+
+```python
+def enhance_pipeline_data(self, evidence_enhanced_cases):
+    for case in evidence_enhanced_cases:
+        result = self.analyzer.analyze_case(case)
+        enhanced.append(result)
+    return enhanced
+```
+
+### CompoundWordplayAnalyzer.analyze_case() (lines 379-513)
+
+**The core method that builds complete word attribution and explanations.**
+
+**Step 1: Get evidence and likely answer (lines 395-410)**
+```python
+evidence_analysis = case.get('evidence_analysis', {})
+scored_candidates = evidence_analysis.get('scored_candidates', [])
+top_candidate = scored_candidates[0]
+evidence = top_candidate.get('evidence')
+likely_answer = top_candidate.get('candidate', '').upper()
+```
+
+**Step 2: Get definition window (line 413)**
+```python
+definition_window = self._get_definition_window(case, clue_words)
+```
+- Looks up `window_support` from case (from definition stage)
+- Returns the window that produced the answer as a candidate
+
+**Step 3: Extract fodder from evidence (lines 416-417)**
+```python
+fodder_words = evidence.fodder_words or []
+fodder_letters = evidence.fodder_letters or ''
+```
+
+**Step 4: Find anagram indicator (lines 419-428)**
+```python
+# First try to get indicator from evidence
+anagram_indicator = None
+if hasattr(evidence, 'indicator_words') and evidence.indicator_words:
+    anagram_indicator = ' '.join(evidence.indicator_words)
+
+# Fallback: search for indicator ourselves
+if not anagram_indicator:
+    anagram_indicator = self._find_anagram_indicator(clue_words, fodder_words,
+                                                     definition_window)
+```
+
+**Step 5: Build word_roles (lines 430-476)**
+- Assigns roles: definition, fodder, anagram_indicator, link
+- Tracks accounted_words
+
+**Step 6: Analyze remaining words (lines 478-486)**
+```python
+if remaining_words:
+    compound_solution = self._analyze_remaining_words(
+        remaining_words, fodder_letters, likely_answer, word_roles, ...)
+```
+- Queries database for substitutions (e.g., "year" → Y)
+- Identifies compound constructions (insertion, container, deletion)
+
+**Step 7: Build explanation (lines 488-493)**
+```python
+explanation = self._build_explanation(...)
+```
+- Creates formula string (e.g., "anagram(TARGETS) + Y (year) = STRATEGY")
+- Creates breakdown list (word-by-word explanation)
+- Assesses quality (solved, high, medium, low, none)
+
+### _find_anagram_indicator() Fallback (lines 515-632)
+
+**Called when `evidence.indicator_words` is empty (which happens for brute force hits).**
+
+**Three-pass approach:**
+
+**Pass 1 (lines 530-541):** Look for TWO-WORD indicators in database
+```python
+for i in range(len(clue_words) - 1):
+    two_word = f"{norm_letters(word1)} {norm_letters(word2)}"
+    indicator_match = self.db.lookup_indicator(two_word)
+    if indicator_match and indicator_match.wordplay_type == 'anagram':
+        return f"{word1} {word2}"
+```
+
+**Pass 2 (lines 543-551):** Look for SINGLE-WORD indicators in database
+```python
+for word in clue_words:
+    indicator_match = self.db.lookup_indicator(word)
+    if indicator_match and indicator_match.wordplay_type == 'anagram':
+        return word
+```
+
+**Pass 3 (lines 553-632):** HEURISTIC - infer from proximity
+- Find words adjacent to fodder (before first fodder, after last fodder)
+- Exclude words in definition_window and link_words
+- Prefer candidate furthest from definition
+- **If none found via database, pick adjacent word and INSERT IT INTO DATABASE as inferred indicator**
+
+### What Gets Saved to stage_compound
+
+**Via `save_stage_compound()` in pipeline_persistence.py:**
+
+| Column | Source |
+|--------|--------|
+| clue_id | From record |
+| clue_text | The clue |
+| likely_answer | Top ranked candidate (NOT db_answer) |
+| db_answer | For comparison only |
+| answer_matches | 1 if likely_answer == db_answer |
+| formula | e.g., "anagram(TARGETS) + Y = STRATEGY" |
+| quality | solved, high, medium, low, none |
+| word_roles | JSON of all word attributions |
+| indicator | The detected/inferred indicator |
+| fodder_words | JSON of fodder words |
+| substitutions | JSON of substitutions found |
+| fully_resolved | 1 if all words accounted for |
+
+---
+
+## DATABASES
+
+The system uses two SQLite databases:
+
+### 1. Main Database: `data/cryptic_new.db`
+
+**Purpose:** Reference data for solving clues - definitions, synonyms, indicators, substitutions.
+
+**Tables:**
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `definition_answers_augmented` | Definition → answer mappings | definition, answer |
+| `synonyms_pairs` | Word → synonym mappings | word, synonym |
+| `indicators` | Wordplay indicator words | word, wordplay_type, confidence |
+| `wordplay` | Substitution mappings (abbreviations, etc.) | word, letters, wordplay_type |
+
+**Used by:**
+- `resources.py` - loads definition_answers_augmented and synonyms_pairs into graph
+- `anagram_evidence_system.py` - loads indicators for anagram detection
+- `compound_wordplay_analyzer.py` - queries indicators and wordplay for analysis
+
+**Key queries:**
+```sql
+-- Definition lookup (resources.py)
+SELECT definition, answer FROM definition_answers_augmented
+
+-- Synonym lookup (resources.py)
+SELECT word, synonym FROM synonyms_pairs
+
+-- Indicator lookup (compound_wordplay_analyzer.py)
+SELECT word, wordplay_type, confidence FROM indicators WHERE word = ?
+
+-- Substitution lookup (compound_wordplay_analyzer.py)
+SELECT word, letters, wordplay_type, confidence FROM wordplay WHERE word = ?
+```
+
+---
+
+### 2. Pipeline Database: `data/pipeline_stages.db`
+
+**Purpose:** Tracks clues through the solving pipeline for analysis and debugging.
+
+**Tables:**
+
+| Table | Stage | Key Columns |
+|-------|-------|-------------|
+| `pipeline_meta` | Config | key, value |
+| `stage_input` | Input | clue_id, clue_text, answer, enumeration, source |
+| `stage_definition` | Definition | candidates (JSON), candidate_count, answer_in_candidates |
+| `stage_anagram` | Anagram | hit_found, fodder_words (JSON), fodder_letters, matched_candidate, unused_words (JSON) |
+| `stage_evidence` | Evidence | evidence_found, top_candidate, top_candidate_score, answer_rank_original, answer_rank_evidence |
+| `stage_compound` | Compound | formula, quality, definition_window, anagram_fodder, anagram_indicator, substitutions (JSON), fully_resolved |
+| `stage_explanation` | Explanation | **PROPOSED** - formula, breakdown (JSON), quality |
+
+**Pipeline flow:**
+```
+stage_input → stage_definition → stage_anagram → stage_evidence → stage_compound → [stage_explanation]
+```
+
+**Key fields by stage:**
+
+**stage_definition:**
+- `answer_in_candidates` - 1 if answer found, 0 if not (gate check)
+- `candidates` - JSON list of all definition candidates
+
+**stage_anagram:**
+- `hit_found` - 1 if brute force or anagram stage found match
+- `fodder_words` - JSON of words that form the anagram
+- `unused_words` - JSON of words not used in fodder
+- `solve_type` - "anagram_exact" (brute force) or "anagram_evidence_*" (anagram stage)
+
+**stage_evidence:**
+- `ranking_improved` - 1 if evidence scoring improved answer rank
+- `scored_candidates` - JSON of candidates with scores
+
+**stage_compound:**
+- `formula` - e.g., "anagram(TARGETS) + Y = STRATEGY"
+- `quality` - solved, high, medium, low, none
+- `fully_resolved` - 1 if all clue words accounted for
+- `word_roles` - JSON of word attributions
+
+---
+
+## DEFICIENCIES (WORKLIST)
+
+| # | Description | File | Priority |
+|---|-------------|------|----------|
+| 3 | Indicator search scope too broad | compound_wordplay_analyzer.py | **Highest** |
+| 4 | Pass 3 inserts inferred indicators into database | compound_wordplay_analyzer.py | **Essential** |
+| 5 | Definition window determination affects indicator selection | compound_wordplay_analyzer.py | Lower |
+| 6 | Monolith file with mixed concerns | compound_wordplay_analyzer.py | Architectural |
+| 7 | compound_analysis.py is misnamed and mislocated | compound_analysis.py | Organisational |
+
+*Note: Original Deficiencies 1-2 (add indicator detection to brute force) have been superseded by the revised approach.*
+
+---
+
+### Deficiency 3: Indicator search scope is too broad
+
+**File:** `compound_wordplay_analyzer.py`
+
+**Function:** `_find_anagram_indicator()` (lines 515-632)
+
+**The problem:**
+
+When brute force finds an exact match, we already know:
+- **Definition** - from the definition window (which produced the candidate)
+- **Fodder** - from brute force (the words that anagram to the candidate)
+
+Therefore: **remaining words = clue - definition - fodder** MUST contain the indicator.
+
+But `_find_anagram_indicator()` searches ALL clue words (Pass 2, lines 543-551):
+```python
+for word in clue_words:  # Searches ALL words
+    if norm_letters(word) in fodder_lower:
+        continue  # Only skips fodder
+    indicator_match = self.db.lookup_indicator(word)
+```
+
+**It does NOT skip definition words.** This means it can pick a word from the definition as the indicator.
+
+**Example:**
+- Clue: "Long-term plan targets unusual year (8)"
+- Definition: "Long-term plan" (produced STRATEGY as candidate)
+- Fodder: "targets" (anagrams to STRATEGY with Y)
+- Remaining words: "unusual", "year"
+- Indicator MUST be in: "unusual", "year"
+
+But the code searches: "Long-term", "plan", "targets", "unusual", "year"
+- If "plan" were in the indicators database, it would be returned before "unusual"
+- Even though "plan" is part of the definition
+
+**Required fix:**
+
+Search ONLY remaining words (clue - definition - fodder) for the indicator:
+```python
+remaining_words = [w for w in clue_words
+                   if norm_letters(w) not in fodder_lower
+                   and norm_letters(w) not in definition_lower]
+
+for word in remaining_words:  # Search only remaining
+    indicator_match = self.db.lookup_indicator(word)
+```
+
+---
+
+### Deficiency 4: Pass 3 inserts inferred indicators into database
+
+**File:** `compound_wordplay_analyzer.py`
+
+**Function:** `_find_anagram_indicator()` (line 629)
+
+**Problem:** When Pass 1 and 2 don't find an indicator in the database, Pass 3 uses heuristics to guess, then inserts the guessed indicator into the database:
+```python
+self._insert_inferred_indicator(best_candidate, 'anagram')
+```
+
+**Impact:** Incorrect indicators pollute the database, causing future failures.
+
+**Required fix:** Remove this line. Do not insert inferred indicators.
+
+---
+
+### Deficiency 5: Definition window determination affects indicator selection
+
+**File:** `compound_wordplay_analyzer.py`
+
+**Function:** `_get_definition_window()` (lines 663-680)
+
+**Problem:** Definition window is determined by which window from definition stage contained the answer. But:
+
+1. **Multiple windows may contain the answer** - "Long-term" and "Long-term plan" might both produce STRATEGY as candidate
+2. **First matching window is used** - Not necessarily the correct/complete definition
+3. **Affects remaining words calculation** - Wrong definition window means wrong remaining words
+
+---
+
+### Deficiency 6: compound_wordplay_analyzer.py is a monolith with mixed concerns
+
+**File:** `compound_wordplay_analyzer.py` (1494 lines)
+
+**Problem:** The file combines two distinct concerns:
+1. **Analysis** - finding indicators, solving compound wordplay, determining word roles
+2. **Presentation** - building explanations, assessing quality, formatting output
+
+**Current structure:**
+
+| Lines | Component | Concern |
+|-------|-----------|---------|
+| 33-75 | Data classes | Shared |
+| 75-180 | DatabaseLookup | Analysis |
+| 182-298 | CompoundSolver | Analysis |
+| 300-1138 | CompoundWordplayAnalyzer (analysis methods) | Analysis |
+| 1140-1330 | CompoundWordplayAnalyzer (explanation methods) | Presentation |
+| 1332-1387 | ExplanationSystemBuilder | Presentation |
+
+**Methods by concern:**
+
+| Analysis (stay in compound_wordplay_analyzer.py) | Presentation (move to explanation_builder.py) |
+|--------------------------------------------------|-----------------------------------------------|
+| `analyze_case()` | `_build_explanation()` |
+| `_find_anagram_indicator()` | `_assess_quality()` |
+| `_get_definition_window()` | `_build_fallback()` |
+| `_analyze_remaining_words()` | ExplanationSystemBuilder |
+| `_handle_deletion_compound()` | |
+| `_try_reduced_fodder()` | |
+| `_classify_remaining_as_indicators()` | |
+
+**Proposed refactoring:**
+
+**File 1: `compound_wordplay_analyzer.py`** (Analysis)
+- Data classes
+- DatabaseLookup
+- CompoundSolver
+- CompoundWordplayAnalyzer with analysis methods only
+- Output: word_roles, compound_solution, indicator, fodder, definition
+
+**File 2: `explanation_builder.py`** (Presentation)
+- `build_explanation()` - formula and breakdown building
+- `assess_quality()` - quality assessment
+- `build_fallback()` - fallback handling
+- ExplanationSystemBuilder wrapper
+- Output: formula, breakdown, quality rating
+
+**New table: `stage_explanation`**
+
+| Column | Description |
+|--------|-------------|
+| clue_id | Foreign key |
+| clue_text | The clue |
+| likely_answer | From compound stage |
+| formula | e.g., "anagram(TARGETS) + Y = STRATEGY" |
+| breakdown | JSON of word-by-word explanation |
+| quality | solved, high, medium, low, none |
+| fully_resolved | 1 if all words accounted for |
+
+**Pipeline after refactoring:**
+```
+stage_definition → stage_anagram → stage_evidence → stage_compound → stage_explanation
+```
+
+**Benefits:**
+1. Separation of concerns - analysis vs presentation
+2. Smaller, more maintainable files
+3. New persistence point for debugging
+4. Explanation building can be modified without affecting analysis
+
+---
+
+### Deficiency 7: compound_analysis.py is misnamed and mislocated
+
+**File:** `solver/solver_engine/compound_analysis.py`
+
+**Problem:**
+1. The file is named "compound_analysis" but it orchestrates the entire anagram track
+2. It resides in solver_engine/ but belongs with other anagram files
+3. It was created as a temporary analysis file but has become permanent
+
+**Current location:** `solver/solver_engine/compound_analysis.py`
+
+**Required change:** Rename to `anagram_analysis.py` and move to `solver/wordplay/anagram/`
+
+**Files in solver/wordplay/anagram/ after reorganisation:**
+
+| File | Purpose |
+|------|---------|
+| `anagram_stage.py` | Brute force + anagram stage hypothesis generation |
+| `anagram_evidence_system.py` | Indicator detection, contiguity rules, evidence scoring |
+| `anagram_analysis.py` | **Orchestration: evidence analysis, compound solving, explanation building** |
+| `compound_wordplay_analyzer.py` | Compound wordplay solving (analysis methods) |
+| `explanation_builder.py` | Explanation building (presentation methods) - after Deficiency 6 fix |
+
+---
+
+## CORRECTIVE ACTIONS SUMMARY (WORKLIST)
+
+The deficiencies documented above serve as the worklist. Each action corresponds to a deficiency:
+
+| Action | Deficiency | File | Fix Required |
+|--------|------------|------|--------------|
+| 1 | Deficiency 3 | compound_wordplay_analyzer.py | **Search only remaining words (clue - definition - fodder), not all clue words** |
+| 2 | Deficiency 4 | compound_wordplay_analyzer.py | Remove `_insert_inferred_indicator()` call - do not pollute database |
+| 3 | Deficiency 5 | compound_wordplay_analyzer.py | Improve window selection when multiple match |
+| 4 | (Superseded) | anagram_evidence_system.py | Transfer indicator_words to AnagramEvidence (if present) |
+| 5 | Deficiency 6 | compound_wordplay_analyzer.py | **Split file: analysis vs presentation. Create explanation_builder.py and stage_explanation table** |
+| 6 | Deficiency 7 | compound_analysis.py | **Rename to anagram_analysis.py, move to solver/wordplay/anagram/, make permanent** |
+
+### Priority Order
+
+**Action 1 (Deficiency 3) is highest priority** - For brute force hits, we already have definition + fodder, so the indicator MUST be in the remaining words. Constraining the search scope directly fixes the observed bug ("plan" picked instead of "unusual").
+
+**Action 2 (Deficiency 4) is essential** - Stop polluting the database with incorrect inferred indicators.
+
+**Action 5 (Deficiency 6) is architectural** - Split the monolith for maintainability. Can be done alongside or after functional fixes.
+
+**Action 6 (Deficiency 7) is organisational** - Rename and relocate the orchestration file to reflect its permanent role in the anagram track.
+
+**Action 3 (Deficiency 5) is lower priority** - May improve edge cases but Action 1 addresses the core issue.
+
+**Action 4 is superseded** - Original deficiencies 1 and 2 proposed adding indicator detection to brute force. This is no longer needed since Action 1 constrains the indicator search in compound stage.
+
+### What We Are NOT Doing
+
+We are NOT adding indicator detection to brute force (`_generate_anagram_hypotheses_original`). The brute force method finds exact anagram matches without needing to know the indicator. The compound stage can reliably find the indicator by searching the constrained remaining words.
+
+---
+
+## File Reorganisation: compound_analysis.py → anagram_analysis.py
+
+*See Deficiency 7 for full details.*
+
+**Summary:** Rename `solver/solver_engine/compound_analysis.py` to `solver/wordplay/anagram/anagram_analysis.py`
+
+### Files in solver/wordplay/anagram/ after reorganisation
+
+| File | Purpose |
+|------|---------|
+| anagram_stage.py | Brute force + anagram stage hypothesis generation |
+| anagram_evidence_system.py | Indicator detection, contiguity rules, evidence scoring |
+| anagram_analysis.py | **Orchestration: evidence analysis, compound solving, explanation building** |
+| compound_wordplay_analyzer.py | Compound wordplay solving (analysis methods) |
+| explanation_builder.py | Explanation building (presentation methods) - after Deficiency 6 |
+
+---
+
+## File 6 (Updated): `solver/wordplay/anagram/anagram_evidence_system.py`
+
+**Purpose:** Sophisticated anagram detection with indicator tracking and contiguity rules.
+
+**Key class:** `ComprehensiveWordplayDetector`
+
+**Key methods:**
+
+### `detect_wordplay_indicators()` (lines 290-357)
+- Tokenizes clue
+- First pass: checks each token against `anagram_indicators_single` set (from database)
+- Second pass: checks two-word combinations against `anagram_indicators_two_word` set
+- Returns dict with indicator words and their positions
+
+### `analyze_clue_for_anagram_evidence()` (lines 796-851)
+- Entry point for evidence-based detection
+- Line 813: Calls `detect_wordplay_indicators()` to find indicators
+- Line 826-829: Returns empty if no anagram indicators found
+- Line 837-838: For each candidate, calls `test_anagram_evidence()`
+
+### `test_anagram_evidence()` (lines 561-795)
+- Tests if candidate is valid anagram of contiguous fodder
+- Line 585-587: Gets contiguous fodder sequences adjacent to indicators
+- Line 613: Tests exact anagram match
+- **Line 618: `indicator_words = list(fodder.indicator.words)`** - extracts indicator
+- Line 636-647: Returns `AnagramEvidence` with `indicator_words` populated
+
+**The indicator comes from `fodder.indicator.words`**, which is the `ContiguousFodder` object's indicator field, set during `_expand_from_indicator()`.
+
+---
+
+## The Gap: Why Cohort 2 Loses Indicator Information
+
+**Brute force (`_generate_anagram_hypotheses_original`):**
+- Uses `itertools.combinations` to try all word combinations
+- Pure letter matching - no database lookup
+- When match found, returns immediately (line 55-56)
+- **Never queries indicators database**
+- **Never populates `indicator_words`**
+
+**Anagram stage (`_generate_anagram_hypotheses_evidence`):**
+- First calls `detect_wordplay_indicators()` to find indicators from database
+- Only accepts fodder that is contiguous and adjacent to an indicator
+- **Populates `indicator_words` from the indicator it found**
+
+**The problem:** Brute force is tried first and bypasses the anagram stage entirely when it finds a match. The indicator detection code exists but is never executed for brute force hits.
+
+---
+
+## File 6: `solver/wordplay/anagram/anagram_evidence_system.py`
+
+**Purpose:** Provides indicator detection and contiguity rules. Called by the anagram stage (`_generate_anagram_hypotheses_evidence`).
+
+**Key class:** `ComprehensiveWordplayDetector`
+
+**Key methods:**
+- `_load_all_indicators_from_database()` - loads anagram indicators from database
+- `detect_wordplay_indicators()` - finds indicators in clue text with positions
+- `get_contiguous_fodder_sequences()` - finds fodder adjacent to indicators
+- `test_anagram_evidence()` - tests if a candidate is a valid anagram of fodder
+
+**Enforces four rules for fodder:**
+1. Indicator detection - single word first, then two-word if needed
+2. Proximity - fodder must be adjacent to indicator (one link word allowed)
+3. Contiguity - fodder words must be next to each other in the clue
+4. Whole words - fodder is complete words, not cherry-picked letters
+
+---
+
+### What happens to anagram hits after brute force
+
+**In pipeline_simulator.py:**
+
+1. **Line 452-456:** `generate_anagram_hypotheses()` is called, returns list of hits
+2. **Line 549:** Hits stored in `record["anagrams"] = anag_hits`
+3. **Line 553:** Record appended to `results` list
+4. **Line 561-563:** At end of pipeline, `save_stage('anagram', run_id, results)` called
+
+**In pipeline_persistence.py (lines 250-278):**
+
+`save_stage_anagram()` saves to `stage_anagram` table:
+
+| Column | Source |
+|--------|--------|
+| run_id | Always 0 |
+| clue_id | rec.get('id') |
+| clue_text | The clue |
+| answer | Database answer (for reference) |
+| hit_found | 1 if any hits, 0 if none |
+| fodder_words | JSON of top_hit['fodder_words'] |
+| fodder_letters | top_hit['fodder_letters'] |
+| matched_candidate | top_hit['answer'] - the candidate that matched |
+| solve_type | top_hit['solve_type'] - e.g., "anagram_exact" |
+| confidence | top_hit['confidence'] - e.g., "provisional" |
+| unused_words | JSON of top_hit['unused_words'] |
+| all_hypotheses | JSON of up to 10 hypotheses |
+
+**Key observations:**
+
+1. Only the **TOP HIT** (first in list) has its details stored in individual columns
+2. Up to 10 hypotheses stored as JSON in `all_hypotheses`
+3. **`indicator_words` is NOT stored** because the brute force method doesn't populate it
+4. The matched_candidate tells us which definition candidate was an anagram match
+
+---
+
+## File 7 (Updated): `data/pipeline_persistence.py`
+
+**Purpose:** Saves pipeline stage data to SQLite database for debugging and analysis.
+
+**Database:** `data/pipeline_stages.db`
+
+**Tables:**
+- `stage_input` - initial clue cohort
+- `stage_definition` - definition candidates and answer_in_candidates flag
+- `stage_anagram` - anagram detection results (fodder_words, matched_candidate, unused_words)
+- `stage_evidence` - evidence scoring results (ranked candidates, score improvements)
+- `stage_compound` - compound analysis results (word_roles, formula, quality)
+
+**Key functions:**
+- `start_run()` - begins new pipeline run (clears old data, always uses run_id=0)
+- `save_stage(stage_name, run_id, records)` - routes to appropriate save function
+- `save_stage_definition()` - saves definition stage
+- `save_stage_anagram()` - saves anagram stage (lines 250-278)
+- `save_stage_evidence()` - saves evidence stage
+- `save_stage_compound()` - saves compound stage
+
+---
+
+## Pipeline Flow Summary
+
+```
+CLUE INPUT
+    ↓
+resources.py: load_graph() - builds definition→answer lookup
+    ↓
+definition_engine.py: generate_definition_windows() - creates possible definition phrases
+    ↓
+definition_engine_edges.py: definition_candidates() - looks up candidates in graph
+    ↓
+pipeline_simulator.py: GATE CHECK
+    - If answer NOT in candidates → SKIP (cannot solve)
+    - If answer IN candidates → CONTINUE
+    ↓
+anagram_stage.py: generate_anagram_hypotheses()
+    - Brute force: try all word combinations for exact letter match
+    - If found → return hypothesis (WITHOUT indicator_words)
+    - If not found → anagram stage with indicators (WITH indicator_words)
+    ↓
+[Further stages: evidence analysis, compound analysis, explanation building]
+```
+
+---
+
+## KNOWN ISSUE: Indicator Not Populated
+
+**Problem:** When `_generate_anagram_hypotheses_original()` finds an exact match, it does NOT populate `indicator_words` in the hypothesis.
+
+**Impact:** Downstream, `compound_wordplay_analyzer.py` receives empty `indicator_words` and falls back to heuristic indicator detection, which can pick the wrong word (e.g., "plan" instead of "unusual").
+
+**Example:**
+- Clue: "Long-term plan targets unusual year (8)"
+- Answer: STRATEGY
+- Fodder: "targets" (7 letters) + Y from "year" (1 letter)
+- Correct indicator: "unusual"
+- System incorrectly picks: "plan" (because it's adjacent to fodder and not in definition)
+
+**Fix needed:** Add indicator detection to `_generate_anagram_hypotheses_original()`.
+
+---
+
+---
+
+## File 8: `solver/solver_engine/compound_analysis.py`
+
+**⚠️ TO BE RENAMED:** This file will be renamed to `anagram_analysis.py` and moved to `solver/wordplay/anagram/` (see Action 6 in Corrective Actions).
+
+**Purpose:** Orchestrates the evidence and compound analysis phases for the anagram track.
+
+**Key class:** `CompoundAnalyzer`
+
+**Main flow in `analyze_compound_cohort()`:**
+
+1. **Filter compound candidates** - clues with anagram hits AND remaining unused words
+2. **Apply evidence analysis** (lines 102-123):
+   - Creates `EvidenceAnalyzer()` from evidence_analysis.py
+   - Calls `apply_evidence_scoring(record)` for each candidate
+   - Saves to `stage_evidence` table
+3. **Apply compound analysis** (lines 130-167):
+   - Calls `explanation_builder.enhance_pipeline_data()` - adds word attribution
+   - Calls `explanation_builder.build_explanations()` - formats explanations
+   - Merges results with `likely_answer`, `db_answer`, `word_roles`
+   - Saves to `stage_compound` table
+
+**Imports:**
+- `run_pipeline_probe` from pipeline_simulator.py
+- `ExplanationSystemBuilder` from compound_wordplay_analyzer.py
+- `EvidenceAnalyzer` from evidence_analysis.py
+- `save_stage` from pipeline_persistence.py
+
+---
+
+## File 9: `solver/solver_engine/evidence_analysis.py`
+
+**Purpose:** Thin wrapper that applies evidence scoring to candidates. This is a REPORTING TOOL.
+
+**Key class:** `EvidenceAnalyzer`
+
+**Key method:** `apply_evidence_scoring(record, debug=False)`
+
+**What it does:**
+1. Extracts `clue_text`, `candidates`, `answer` from the record
+2. Calls `detector.analyze_and_rank_anagram_candidates()` from anagram_evidence_system.py
+3. Returns enhanced record with `evidence_analysis` containing:
+   - `evidence_found` - count of candidates with evidence
+   - `scored_candidates` - ranked list with scores
+   - `answer_rank_original` - where answer was before scoring
+   - `answer_rank_evidence` - where answer is after scoring
+   - `ranking_improved` - boolean
+
+**CRITICAL:** This calls into anagram_evidence_system.py which uses `generate_anagram_hypotheses()` from anagram_stage.py.
+
+---
+
+## File 10: `solver/wordplay/anagram/compound_wordplay_analyzer.py`
+
+**Purpose:** Builds complete explanations with word roles, indicator detection, and substitution lookups.
+
+**Key classes:**
+- `DatabaseLookup` - queries indicators and wordplay tables
+- `CompoundSolver` - solves insertion, container, deletion, reversal operations
+- `CompoundWordplayAnalyzer` - main analyzer
+- `ExplanationSystemBuilder` - wrapper for pipeline compatibility
+
+**Key method:** `CompoundWordplayAnalyzer.analyze_case(case)`
+
+**What it does (lines 379-513):**
+1. Gets `scored_candidates` from evidence analysis
+2. Takes top candidate as `likely_answer` (NOT the database answer)
+3. Extracts `fodder_words`, `fodder_letters` from evidence
+4. **Finds anagram indicator** (lines 419-428):
+   - First tries to get `indicator_words` from evidence object
+   - **FALLBACK:** If empty, calls `_find_anagram_indicator()` (THIS IS THE BUG)
+5. Builds `word_roles` list - tracks each word's role (definition, fodder, indicator, link, etc.)
+6. Analyzes remaining words for substitutions using database
+7. Builds explanation with formula and breakdown
+
+**`_find_anagram_indicator()` method (lines 515-632):**
+- First pass: looks for two-word indicators in database
+- Second pass: looks for single-word indicators in database
+- **Third pass (FALLBACK):** Infers indicator by proximity to fodder
+  - Picks word adjacent to fodder that's NOT in definition
+  - **THIS IS WHERE "plan" GETS INCORRECTLY PICKED**
+
+---
+
+## Pipeline Flow Summary (Updated)
+
+```
+CLUE INPUT: "Long-term plan targets unusual year (8)"
+    ↓
+resources.py: load_graph()
+    ↓
+definition_engine_edges.py: definition_candidates()
+    → Returns candidates including STRATEGY
+    ↓
+pipeline_simulator.py: GATE CHECK
+    → STRATEGY is in candidates, continue
+    ↓
+anagram_stage.py: _generate_anagram_hypotheses_original()
+    → Tries all word combinations
+    → Finds: ["targets"] letters match STRATEGY
+    → Returns: fodder_words=["targets"], unused_words=["Long-term","plan","unusual","year"]
+    → DOES NOT RETURN: indicator_words (field missing!)
+    ↓
+evidence_analysis.py: apply_evidence_scoring()
+    → Receives hypothesis without indicator_words
+    → Passes it through unchanged
+    ↓
+compound_wordplay_analyzer.py: analyze_case()
+    → Checks evidence.indicator_words → EMPTY
+    → Falls back to _find_anagram_indicator() heuristic
+    → Heuristic: find word adjacent to fodder, not in definition
+    → "plan" is adjacent to "targets"
+    → System thinks "Long-term" alone is definition (wrong)
+    → PICKS "plan" AS INDICATOR (WRONG!)
+    ↓
+OUTPUT:
+    Formula: anagram(TARGETS) + Y (year) = STRATEGY
+    Breakdown: "plan" = anagram indicator ← WRONG!
+    Should be: "unusual" = anagram indicator
+```
+
+---
+
+## THE BUG: Indicator Detection Gap
+
+**Root cause:** `_generate_anagram_hypotheses_original()` in anagram_stage.py is pure letter matching. It finds THAT an anagram exists but never identifies WHICH word is the indicator.
+
+**The problem in detail:**
+
+1. `_generate_anagram_hypotheses_original()` tries all word combinations
+2. It finds: fodder_words=["targets"] matches candidate STRATEGY
+3. It returns this match with `unused_words=["Long-term", "plan", "unusual", "year"]`
+4. **It does NOT identify that "unusual" is the indicator**
+5. The hypothesis has no `indicator_words` field
+
+6. Later, `compound_wordplay_analyzer.py` receives this hypothesis
+7. It checks for `indicator_words` - finds nothing
+8. Falls back to `_find_anagram_indicator()` heuristic
+9. Heuristic picks word adjacent to fodder that's not in definition
+10. "plan" is adjacent to "targets" (the fodder)
+11. "plan" is not in the definition "Long-term plan" (incorrectly determined)
+12. **System incorrectly picks "plan" as indicator**
+
+**Why "unusual" should be picked:**
+- "unusual" IS in the anagram indicators database
+- "unusual" is adjacent to "year" which contributes Y
+- A proper indicator lookup would find it
+
+**Example failure:**
+- Clue: "Long-term plan targets unusual year (8)"
+- Correct parse: "Long-term plan" = definition, "unusual" = indicator, "targets" + Y = fodder → STRATEGY
+- System parse: "Long-term" = definition, "plan" = indicator (WRONG), "targets" = fodder → STRATEGY
+
+**Fix needed:**
+When `_generate_anagram_hypotheses_original()` finds an exact match, it should also:
+1. Query the indicators database for anagram indicators among the unused words
+2. Identify which unused word is the indicator
+3. Include `indicator_words` in the returned hypothesis
