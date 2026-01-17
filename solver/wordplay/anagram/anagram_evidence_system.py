@@ -278,6 +278,97 @@ class ComprehensiveWordplayDetector:
 
         return False, ""
 
+    def _apply_deletion_indicators(self, fodder_words: List[str],
+                                   fodder_indicator: 'IndicatorMatch') -> List[dict]:
+        """
+        Check if fodder contains deletion indicators (like "almost") and apply them.
+
+        For example: ["almost", "gets", "meaner"] with "almost" being last_delete
+        becomes: ["GET", "meaner"] (removing S from "gets")
+
+        Returns list of modified fodder options with metadata:
+        [{'words': [...], 'letters': '...', 'deletion_applied': {...}}, ...]
+        """
+        results = []
+
+        for i, word in enumerate(fodder_words):
+            word_lower = word.lower().strip('.,;:!?')
+
+            # Check if this word is a parts indicator
+            if word_lower in self.parts_indicators:
+                # Look up the indicator to get subtype
+                # We need to check the database for the subtype
+                # For now, check common deletion indicators
+                deletion_indicators = {
+                    'almost': 'last_delete',
+                    'nearly': 'last_delete',
+                    'mostly': 'last_delete',
+                    'largely': 'last_delete',
+                    'about': 'last_delete',  # can mean truncation
+                    'short': 'last_delete',
+                    'shortly': 'last_delete',
+                    'headless': 'first_delete',
+                    'beheaded': 'first_delete',
+                    'topless': 'first_delete',
+                }
+
+                if word_lower in deletion_indicators:
+                    subtype = deletion_indicators[word_lower]
+
+                    # The next word is the target for deletion
+                    if i + 1 < len(fodder_words):
+                        target_word = fodder_words[i + 1]
+                        target_letters = ''.join(c for c in target_word if c.isalpha())
+
+                        if target_letters:
+                            # Apply deletion
+                            if 'last' in subtype:
+                                modified_letters = target_letters[
+                                                   :-1]  # Remove last letter
+                            elif 'first' in subtype:
+                                modified_letters = target_letters[
+                                                   1:]  # Remove first letter
+                            else:
+                                continue
+
+                            if modified_letters:
+                                # Build new fodder list: skip the indicator, use modified target
+                                new_words = []
+                                for j, w in enumerate(fodder_words):
+                                    if j == i:
+                                        continue  # Skip the indicator
+                                    elif j == i + 1:
+                                        new_words.append(
+                                            target_word)  # Keep original word for display
+                                    else:
+                                        new_words.append(w)
+
+                                # Calculate total letters with modification
+                                total_letters = ''
+                                for j, w in enumerate(fodder_words):
+                                    if j == i:
+                                        continue  # Skip indicator letters
+                                    elif j == i + 1:
+                                        total_letters += modified_letters.lower()
+                                    else:
+                                        total_letters += ''.join(
+                                            c.lower() for c in w if c.isalpha())
+
+                                results.append({
+                                    'words': new_words,
+                                    'letters': total_letters,
+                                    'deletion_applied': {
+                                        'indicator': word,
+                                        'target': target_word,
+                                        'original': target_letters,
+                                        'modified': modified_letters,
+                                        'subtype': subtype
+                                    },
+                                    'indicator': fodder_indicator
+                                })
+
+        return results
+
     def _tokenize_clue(self, clue_text: str) -> List[str]:
         """Split clue into tokens, preserving words with apostrophes."""
         # Split on whitespace, keeping punctuation attached
@@ -515,11 +606,149 @@ class ComprehensiveWordplayDetector:
             right = self._expand_from_indicator(tokens, indicator, 'right')
             all_sequences.extend(right)
 
+        # Generate deletion variants for sequences containing deletion indicators
+        deletion_variants = []
+        for seq in all_sequences:
+            variants = self._generate_deletion_variants(seq)
+            deletion_variants.extend(variants)
+
+        all_sequences.extend(deletion_variants)
+
         # Filter by target length if specified
         if target_length is not None:
             all_sequences = [s for s in all_sequences if len(s.letters) == target_length]
 
         return all_sequences
+
+    def _generate_deletion_variants(self, fodder: ContiguousFodder) -> List[
+        ContiguousFodder]:
+        """
+        Generate fodder variants by applying modifier indicators (deletion AND doubling).
+
+        Deletion: ["almost", "gets", "meaner"] -> ["gets", "meaner"] with "getmeaner"
+        Doubling: ["ace", "doubly", "hot"] -> ["ace", "hot"] with "acehothot"
+        """
+        deletion_indicators = {
+            'almost': 'last_delete',
+            'nearly': 'last_delete',
+            'mostly': 'last_delete',
+            'largely': 'last_delete',
+            'about': 'last_delete',
+            'short': 'last_delete',
+            'shortly': 'last_delete',
+            'endless': 'last_delete',
+            'endlessly': 'last_delete',
+            'limitless': 'last_delete',
+            'headless': 'first_delete',
+            'beheaded': 'first_delete',
+            'topless': 'first_delete',
+            'leading': 'first_delete',  # can mean "remove leading letter"
+        }
+
+        doubling_indicators = {
+            'doubly', 'twice', 'double', 'doubled', 'two', 'dual',
+            'repeated', 'repeating', 'again', 'twofold'
+        }
+
+        variants = []
+        words = fodder.words
+
+        for i, word in enumerate(words):
+            word_lower = word.lower().strip('.,;:!?')
+
+            # Handle DELETION indicators
+            if word_lower in deletion_indicators:
+                subtype = deletion_indicators[word_lower]
+
+                # Next word is the target for deletion
+                if i + 1 < len(words):
+                    target_word = words[i + 1]
+                    target_letters = ''.join(
+                        c.lower() for c in target_word if c.isalpha())
+
+                    if len(target_letters) > 1:  # Must have letters to remove
+                        if 'last' in subtype:
+                            modified_letters = target_letters[:-1]
+                        elif 'first' in subtype:
+                            modified_letters = target_letters[1:]
+                        else:
+                            continue
+
+                        # Build new word list and letters
+                        new_words = []
+                        new_letters = ''
+
+                        for j, w in enumerate(words):
+                            if j == i:
+                                continue  # Skip the deletion indicator
+                            elif j == i + 1:
+                                new_words.append(w)  # Keep word for display
+                                new_letters += modified_letters
+                            else:
+                                new_words.append(w)
+                                new_letters += ''.join(
+                                    c.lower() for c in w if c.isalpha())
+
+                        if new_words and new_letters:
+                            variant = ContiguousFodder(
+                                words=new_words,
+                                positions=fodder.positions,
+                                letters=new_letters,
+                                indicator=fodder.indicator,
+                                side=fodder.side
+                            )
+                            variant.deletion_info = {
+                                'indicator': word,
+                                'target': target_word,
+                                'original': target_letters,
+                                'modified': modified_letters,
+                                'subtype': subtype
+                            }
+                            variants.append(variant)
+
+            # Handle DOUBLING indicators
+            elif word_lower in doubling_indicators:
+                # Next word gets doubled
+                if i + 1 < len(words):
+                    target_word = words[i + 1]
+                    target_letters = ''.join(
+                        c.lower() for c in target_word if c.isalpha())
+
+                    if target_letters:
+                        doubled_letters = target_letters + target_letters
+
+                        # Build new word list and letters
+                        new_words = []
+                        new_letters = ''
+
+                        for j, w in enumerate(words):
+                            if j == i:
+                                continue  # Skip the doubling indicator
+                            elif j == i + 1:
+                                new_words.append(w)  # Keep word for display
+                                new_letters += doubled_letters
+                            else:
+                                new_words.append(w)
+                                new_letters += ''.join(
+                                    c.lower() for c in w if c.isalpha())
+
+                        if new_words and new_letters:
+                            variant = ContiguousFodder(
+                                words=new_words,
+                                positions=fodder.positions,
+                                letters=new_letters,
+                                indicator=fodder.indicator,
+                                side=fodder.side
+                            )
+                            variant.doubling_info = {
+                                'indicator': word,
+                                'target': target_word,
+                                'original': target_letters,
+                                'doubled': doubled_letters
+                            }
+                            variants.append(variant)
+
+        return variants
 
     def _can_word_contribute_to_candidates(self, word: str,
                                            candidates: List[str]) -> bool:
@@ -602,6 +831,24 @@ class ComprehensiveWordplayDetector:
                 fodder_word_set = set(w.lower() for w in fodder.words)
                 indicator_word_set = set(w.lower() for w in indicator_words)
 
+                # Check if this is a variant (deletion or doubling)
+                deletion_info = getattr(fodder, 'deletion_info', None)
+                doubling_info = getattr(fodder, 'doubling_info', None)
+
+                # Determine evidence type and modifier indicator word
+                if deletion_info:
+                    evidence_type = "exact_with_deletion"
+                    confidence = 0.88
+                    modifier_indicator_word = deletion_info['indicator'].lower()
+                elif doubling_info:
+                    evidence_type = "exact_with_doubling"
+                    confidence = 0.88
+                    modifier_indicator_word = doubling_info['indicator'].lower()
+                else:
+                    evidence_type = "exact"
+                    confidence = 0.9
+                    modifier_indicator_word = None
+
                 # Identify link words and remaining words
                 link_words_found = []
                 remaining_words = []
@@ -611,23 +858,87 @@ class ComprehensiveWordplayDetector:
                         continue  # Already accounted as fodder
                     if t_lower in indicator_word_set:
                         continue  # Already accounted as indicator
+                    if modifier_indicator_word and t_lower == modifier_indicator_word:
+                        continue  # The modifier indicator is accounted for
                     if t_lower in LINK_WORDS:
                         link_words_found.append(t)
                     else:
                         remaining_words.append(t)
 
-                return AnagramEvidence(
+                evidence = AnagramEvidence(
                     candidate=candidate,
                     fodder_words=list(fodder.words),
                     fodder_letters=fodder_letters,
-                    evidence_type="exact",
-                    confidence=0.9,
+                    evidence_type=evidence_type,
+                    confidence=confidence,
                     indicator_words=indicator_words,
                     indicator_position=fodder.indicator.start_pos,
                     link_words=link_words_found,
                     remaining_words=remaining_words,
                     unused_clue_words=remaining_words  # Backward compatibility
                 )
+
+                # Attach variant info for downstream use
+                if deletion_info:
+                    evidence.deletion_info = deletion_info
+                if doubling_info:
+                    evidence.doubling_info = doubling_info
+
+                return evidence
+
+            # Test with deletion indicators applied (e.g., "almost gets" -> "GET")
+            deletion_variants = self._apply_deletion_indicators(list(fodder.words),
+                                                                fodder.indicator)
+            for variant in deletion_variants:
+                variant_letters = variant['letters']
+
+                if debug and i < 10:
+                    print(
+                        f"           Deletion variant: {variant['words']} → '{variant_letters}' ({len(variant_letters)} letters)")
+
+                if self.is_anagram(candidate_letters, variant_letters):
+                    if debug:
+                        print(f"      ★ EXACT ANAGRAM MATCH (with deletion)!")
+
+                    deletion_info = variant['deletion_applied']
+                    indicator_words = list(fodder.indicator.words)
+
+                    # Words that contribute to the anagram
+                    fodder_word_set = set(w.lower() for w in variant['words'])
+                    indicator_word_set = set(w.lower() for w in indicator_words)
+                    deletion_indicator_word = deletion_info['indicator'].lower()
+
+                    link_words_found = []
+                    remaining_words = []
+                    for t in tokens:
+                        t_lower = t.lower()
+                        if t_lower in fodder_word_set:
+                            continue
+                        if t_lower in indicator_word_set:
+                            continue
+                        if t_lower == deletion_indicator_word:
+                            continue  # The deletion indicator is accounted for
+                        if t_lower in LINK_WORDS:
+                            link_words_found.append(t)
+                        else:
+                            remaining_words.append(t)
+
+                    # Return evidence with deletion info
+                    evidence = AnagramEvidence(
+                        candidate=candidate,
+                        fodder_words=variant['words'],
+                        fodder_letters=variant_letters,
+                        evidence_type="exact_with_deletion",
+                        confidence=0.88,
+                        indicator_words=indicator_words,
+                        indicator_position=fodder.indicator.start_pos,
+                        link_words=link_words_found,
+                        remaining_words=remaining_words,
+                        unused_clue_words=remaining_words
+                    )
+                    # Attach deletion info for downstream use
+                    evidence.deletion_info = deletion_info
+                    return evidence
 
             # Test partial contribution (only if anagram indicators present)
             if indicators.get('anagram'):
@@ -900,7 +1211,9 @@ class ComprehensiveWordplayDetector:
         return boost + word_count_bonus
 
     def analyze_and_rank_anagram_candidates(self, clue_text: str, candidates: List[str],
-                                            answer: str, debug: bool = False) -> Dict[
+                                            answer: str, debug: bool = False,
+                                            definition_support: Dict[
+                                                str, List[str]] = None) -> Dict[
         str, any]:
         """
         ACTUAL WORKING LOGIC MOVED FROM evidence_analysis.py
@@ -908,11 +1221,18 @@ class ComprehensiveWordplayDetector:
         Performs comprehensive anagram analysis and ranking for all candidates.
         This is the proven working method that evidence_analysis.py was using directly.
 
+        UPDATED: Now uses test_anagram_evidence for each candidate to support
+        deletion variants (e.g., "almost gets" -> "GET").
+
+        UPDATED: Now accepts definition_support to weight candidates by definition
+        match quality (specific phrases like "biting pain" rank higher than generic "pain").
+
         Args:
             clue_text: The cryptic clue text
             candidates: List of all definition candidates to analyze
             answer: The target answer for validation
             debug: Enable debug output
+            definition_support: Dict mapping window phrases to candidate lists
 
         Returns:
             Dict containing complete ranked candidate information
@@ -927,69 +1247,105 @@ class ComprehensiveWordplayDetector:
                 "evidence_found": 0
             }
 
-        # Use the working anagram system that evidence_analysis.py uses
+        # Detect indicators once for all candidates
+        indicators = self.detect_wordplay_indicators(clue_text)
         enumeration_num = len(answer) if answer else 0
+        enumeration_str = str(enumeration_num) if enumeration_num else None
 
         if debug:
-            print(f"DEBUG: Calling generate_anagram_hypotheses for '{clue_text[:50]}...'")
-            print(
-                f"DEBUG: enumeration_num={enumeration_num}, candidates_count={len(candidates)}")
+            print(f"DEBUG: Testing {len(candidates)} candidates with evidence system")
+            print(f"DEBUG: Indicators found: {indicators}")
 
-        # Lazy import to avoid circular dependency
-        from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
-        hypotheses = generate_anagram_hypotheses(clue_text, enumeration_num,
-                                                 candidates)
-
-        if debug:
-            print(f"DEBUG: Got {len(hypotheses)} hypotheses")
-            if hypotheses:
-                print(f"DEBUG: First hypothesis: {hypotheses[0]}")
-
-        # Convert hypotheses to AnagramEvidence objects
+        # Test each candidate using test_anagram_evidence (supports deletion variants)
         evidence_list = []
-        for hyp in hypotheses:
-            # Convert confidence from string to float if needed
-            confidence_raw = hyp.get("confidence", 1.0)
-            if debug:
-                print(
-                    f"      DEBUG: Raw confidence: {confidence_raw} (type: {type(confidence_raw)})")
+        evidence_by_candidate = {}
 
-            if isinstance(confidence_raw, str):
-                # Map string confidence to numeric values
-                confidence_map = {'provisional': 0.5, 'high': 0.9, 'medium': 0.7,
-                                  'low': 0.3}
-                confidence = confidence_map.get(confidence_raw.lower(), 0.5)
+        for candidate in candidates:
+            candidate_upper = candidate.upper().replace(' ', '')
+
+            # Skip if wrong length
+            if enumeration_num and len(candidate_upper) != enumeration_num:
+                continue
+
+            # Use test_anagram_evidence which supports deletion variants
+            evidence = self.test_anagram_evidence(
+                candidate_upper, clue_text, indicators,
+                enumeration=enumeration_str, debug=False
+            )
+
+            if evidence:
+                evidence_list.append(evidence)
+                evidence_by_candidate[candidate_upper] = evidence
+
                 if debug:
                     print(
-                        f"      DEBUG: Converted confidence '{confidence_raw}' to {confidence}")
-            else:
-                confidence = confidence_raw
+                        f"DEBUG: {candidate} -> evidence_type={evidence.evidence_type}, confidence={evidence.confidence}")
 
-            # Create evidence object using the AnagramEvidence dataclass
-            evidence = AnagramEvidence(
-                candidate=hyp.get("answer", ""),
-                fodder_words=hyp.get("fodder_words", []),
-                fodder_letters=hyp.get("fodder_letters", ""),
-                evidence_type=hyp.get("evidence_type", hyp.get("solve_type", "exact")),
-                confidence=confidence,
-                excess_letters=hyp.get("excess_letters", ""),
-                needed_letters=hyp.get("needed_letters", ""),
-                unused_clue_words=hyp.get("unused_words", [])
-            )
-            evidence_list.append(evidence)
+        # Also run brute force for candidates not found by evidence system
+        # This ensures we don't miss any valid anagrams
+        from solver.wordplay.anagram.anagram_stage import generate_anagram_hypotheses
+        hypotheses = generate_anagram_hypotheses(clue_text, enumeration_num, candidates)
+
+        for hyp in hypotheses:
+            hyp_candidate = hyp.get("answer", "").upper().replace(' ', '')
+            if hyp_candidate not in evidence_by_candidate:
+                # Convert to AnagramEvidence
+                confidence_raw = hyp.get("confidence", 1.0)
+                if isinstance(confidence_raw, str):
+                    confidence_map = {'provisional': 0.5, 'high': 0.9, 'medium': 0.7,
+                                      'low': 0.3}
+                    confidence = confidence_map.get(confidence_raw.lower(), 0.5)
+                else:
+                    confidence = confidence_raw
+
+                evidence = AnagramEvidence(
+                    candidate=hyp.get("answer", ""),
+                    fodder_words=hyp.get("fodder_words", []),
+                    fodder_letters=hyp.get("fodder_letters", ""),
+                    evidence_type=hyp.get("evidence_type",
+                                          hyp.get("solve_type", "exact")),
+                    confidence=confidence,
+                    excess_letters=hyp.get("excess_letters", ""),
+                    needed_letters=hyp.get("needed_letters", ""),
+                    unused_clue_words=hyp.get("unused_words", [])
+                )
+                evidence_list.append(evidence)
+                evidence_by_candidate[hyp_candidate] = evidence
 
         # Create scored candidates list - PRESERVES ALL RANKED CANDIDATE INFORMATION
         scored_candidates = []
-        evidence_by_candidate = {ev.candidate.upper(): ev for ev in evidence_list}
 
         for candidate in candidates:
-            candidate_upper = candidate.upper()
+            candidate_upper = candidate.upper().replace(' ', '')
             evidence = evidence_by_candidate.get(candidate_upper)
 
             # Calculate evidence score boost using existing proven method
             evidence_score = 0.0
             if evidence:
                 evidence_score = self.calculate_anagram_score_boost(evidence)
+
+                # Boost exact matches (including deletion/doubling variants) over partial
+                if evidence.evidence_type in ('exact', 'exact_with_deletion',
+                                              'exact_with_doubling'):
+                    evidence_score += 50  # Significant boost for exact matches
+
+            # Add definition match quality bonus (if definition_support provided)
+            if definition_support:
+                # Find windows that produced this candidate
+                candidate_windows = set()
+                for window, cands in definition_support.items():
+                    if candidate in cands or candidate.upper() in [c.upper() for c in
+                                                                   cands]:
+                        candidate_windows.add(window)
+
+                if candidate_windows:
+                    # Bonus for number of matching windows
+                    evidence_score += len(candidate_windows) * 5
+
+                    # Bonus for longer/more specific windows
+                    # "biting pain" (2 words) > "pain" (1 word)
+                    max_window_words = max(len(w.split()) for w in candidate_windows)
+                    evidence_score += max_window_words * 10  # Significant boost for specific phrases
 
             scored_candidates.append({
                 "candidate": candidate,

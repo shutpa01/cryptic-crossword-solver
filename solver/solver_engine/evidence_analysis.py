@@ -19,7 +19,8 @@ import os
 sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
 
 # Import the original pipeline simulator (maintaining sanctity)
-from solver.solver_engine.pipeline_simulator import run_pipeline_probe, MAX_CLUES, WORDPLAY_TYPE
+from solver.solver_engine.pipeline_simulator import run_pipeline_probe, MAX_CLUES, \
+    WORDPLAY_TYPE
 from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
 
 # Evidence scoring configuration
@@ -68,6 +69,9 @@ class EvidenceAnalyzer:
         candidates = record["definition_candidates"]
         answer = record["answer"]
 
+        # Get definition support for weighting (if available)
+        definition_support = record.get("window_support", None)
+
         if not candidates:
             return record
 
@@ -76,7 +80,8 @@ class EvidenceAnalyzer:
             clue_text=clue_text,
             candidates=candidates,
             answer=answer,
-            debug=debug
+            debug=debug,
+            definition_support=definition_support
         )
 
         # Format results for display - preserving exact same output format
@@ -261,7 +266,7 @@ def main():
 
     # Override the ONLY_MISSING_DEFINITION setting for evidence analysis
     # We need clues where the answer IS in definition candidates
-    import pipeline_simulator
+    from solver.solver_engine import pipeline_simulator
     original_setting = pipeline_simulator.ONLY_MISSING_DEFINITION
     pipeline_simulator.ONLY_MISSING_DEFINITION = False  # We want answer in def candidates
 

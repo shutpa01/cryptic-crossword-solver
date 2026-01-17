@@ -810,28 +810,54 @@ class CompoundWordplayAnalyzer:
 
                 if source_word:
                     source_letters = get_letters(source_word)
-                    extracted_letter = None
 
-                    # Extract first or last letter based on subtype
-                    if 'first' in subtype.lower() and source_letters:
-                        extracted_letter = source_letters[0]
-                    elif 'last' in subtype.lower() and source_letters:
-                        extracted_letter = source_letters[-1]
+                    # Check if this is a DELETE operation
+                    if 'delete' in subtype.lower() and source_letters:
+                        remaining_fodder = None
 
-                    if extracted_letter and extracted_letter in needed_letters:
-                        parts_found.append({
-                            'indicator': f"{word} {remaining_words[i + 1]}",
-                            'indicator_words': [word, remaining_words[i + 1]],
-                            'source_word': source_word,
-                            'extracted_letter': extracted_letter,
-                            'subtype': subtype
-                        })
-                        words_used_by_parts.update(
-                            [word.lower(), remaining_words[i + 1].lower(),
-                             source_word.lower()])
+                        if 'first' in subtype.lower():
+                            remaining_fodder = source_letters[1:]
+                        elif 'last' in subtype.lower():
+                            remaining_fodder = source_letters[:-1]
 
-                        # Update needed letters
-                        needed_letters = needed_letters.replace(extracted_letter, '', 1)
+                        if remaining_fodder:
+                            parts_found.append({
+                                'indicator': f"{word} {remaining_words[i + 1]}",
+                                'indicator_words': [word, remaining_words[i + 1]],
+                                'source_word': source_word,
+                                'remaining_fodder': remaining_fodder,
+                                'subtype': subtype,
+                                'is_delete': True
+                            })
+                            words_used_by_parts.update(
+                                [word.lower(), remaining_words[i + 1].lower(),
+                                 source_word.lower()])
+
+                    # EXTRACT operation
+                    else:
+                        extracted_letter = None
+
+                        if 'first' in subtype.lower() and source_letters:
+                            extracted_letter = source_letters[0]
+                        elif 'last' in subtype.lower() and source_letters:
+                            extracted_letter = source_letters[-1]
+
+                        if extracted_letter and extracted_letter in needed_letters:
+                            parts_found.append({
+                                'indicator': f"{word} {remaining_words[i + 1]}",
+                                'indicator_words': [word, remaining_words[i + 1]],
+                                'source_word': source_word,
+                                'extracted_letter': extracted_letter,
+                                'subtype': subtype,
+                                'is_delete': False
+                            })
+                            words_used_by_parts.update(
+                                [word.lower(), remaining_words[i + 1].lower(),
+                                 source_word.lower()])
+
+                            # Update needed letters
+                            needed_letters = needed_letters.replace(extracted_letter, '',
+                                                                    1)
 
         # Process parts indicators found
         for part in parts_found:
@@ -842,25 +868,36 @@ class CompoundWordplayAnalyzer:
                 ))
                 accounted_words.add(ind_word.lower())
 
-            # Add source word as providing the extracted letter
-            # Make source string readable
-            source_desc = 'last letter of' if 'last' in part[
-                'subtype'].lower() else 'first letter of'
-            word_roles.append(WordRole(
-                part['source_word'], 'substitution', part['extracted_letter'],
-                source_desc
-            ))
-            accounted_words.add(part['source_word'].lower())
+            if part.get('is_delete'):
+                # DELETE operation: add source word as truncated fodder
+                delete_type = 'last' if 'last' in part['subtype'].lower() else 'first'
+                word_roles.append(WordRole(
+                    part['source_word'], 'fodder', part['remaining_fodder'],
+                    f"minus {delete_type} letter"
+                ))
+                accounted_words.add(part['source_word'].lower())
 
-            # Add to substitutions list for formula building
-            found_substitutions.append((
-                part['source_word'],
-                SubstitutionMatch(
-                    word=part['source_word'],
-                    letters=part['extracted_letter'],
-                    category=source_desc
-                )
-            ))
+                # Add to additional_fodder for formula building
+                additional_fodder.append((part['source_word'], part['remaining_fodder']))
+            else:
+                # EXTRACT operation: add source word as providing the extracted letter
+                source_desc = 'last letter of' if 'last' in part[
+                    'subtype'].lower() else 'first letter of'
+                word_roles.append(WordRole(
+                    part['source_word'], 'substitution', part['extracted_letter'],
+                    source_desc
+                ))
+                accounted_words.add(part['source_word'].lower())
+
+                # Add to substitutions list for formula building
+                found_substitutions.append((
+                    part['source_word'],
+                    SubstitutionMatch(
+                        word=part['source_word'],
+                        letters=part['extracted_letter'],
+                        category=source_desc
+                    )
+                ))
 
         for word in remaining_words:
             word_lower = word.lower()
@@ -890,52 +927,108 @@ class CompoundWordplayAnalyzer:
                     accounted_words.add(word_lower)
                     continue
 
-                # Handle single-word parts indicators (like "initially", "finally")
-                elif op_type == 'parts' and needed_letters:
+                # Handle single-word parts indicators (like "initially", "finally", "almost")
+                elif op_type == 'parts':
                     subtype = indicator_match.subtype or ''
-                    # Find the next word in remaining_words to extract letter from
+                    # Find the next word in remaining_words to operate on
                     try:
                         current_idx = remaining_words.index(word)
                         if current_idx + 1 < len(remaining_words):
                             source_word = remaining_words[current_idx + 1]
                             source_letters = get_letters(source_word)
-                            extracted_letter = None
 
-                            if 'first' in subtype.lower() and source_letters:
-                                extracted_letter = source_letters[0]
-                            elif 'last' in subtype.lower() and source_letters:
-                                extracted_letter = source_letters[-1]
+                            # Check if this is a DELETE operation (remove letter, use rest as fodder)
+                            if 'delete' in subtype.lower() and source_letters:
+                                remaining_fodder = None
 
-                            if extracted_letter and extracted_letter in needed_letters:
-                                # Add indicator
-                                word_roles.append(WordRole(
-                                    word, 'parts_indicator', '', f"database ({subtype})"
-                                ))
-                                accounted_words.add(word_lower)
+                                if 'first' in subtype.lower():
+                                    remaining_fodder = source_letters[
+                                                       1:]  # Remove first letter
+                                elif 'last' in subtype.lower():
+                                    remaining_fodder = source_letters[
+                                                       :-1]  # Remove last letter
 
-                                # Add source word with readable description
-                                source_desc = 'last letter of' if 'last' in subtype.lower() else 'first letter of'
-                                word_roles.append(WordRole(
-                                    source_word, 'substitution', extracted_letter,
-                                    source_desc
-                                ))
-                                accounted_words.add(source_word.lower())
-                                words_used_by_parts.add(source_word.lower())
+                                if remaining_fodder:
+                                    # Check if remaining letters contribute to needed_letters
+                                    can_use = True
+                                    temp_needed = list(
+                                        needed_letters) if needed_letters else []
+                                    for c in remaining_fodder:
+                                        if c in temp_needed:
+                                            temp_needed.remove(c)
+                                        else:
+                                            can_use = False
+                                            break
 
-                                # Add to substitutions
-                                found_substitutions.append((
-                                    source_word,
-                                    SubstitutionMatch(
-                                        word=source_word,
-                                        letters=extracted_letter,
-                                        category=source_desc
-                                    )
-                                ))
+                                    if can_use or not needed_letters:
+                                        # Add indicator
+                                        delete_type = 'last' if 'last' in subtype.lower() else 'first'
+                                        word_roles.append(WordRole(
+                                            word, 'parts_indicator', '',
+                                            f"database ({subtype})"
+                                        ))
+                                        accounted_words.add(word_lower)
 
-                                # Update needed letters
-                                needed_letters = needed_letters.replace(extracted_letter,
-                                                                        '', 1)
-                                continue
+                                        # Add source word as truncated fodder
+                                        word_roles.append(WordRole(
+                                            source_word, 'fodder', remaining_fodder,
+                                            f"minus {delete_type} letter"
+                                        ))
+                                        accounted_words.add(source_word.lower())
+                                        words_used_by_parts.add(source_word.lower())
+
+                                        # Add to additional_fodder for formula building
+                                        additional_fodder.append(
+                                            (source_word, remaining_fodder))
+
+                                        # Update needed letters
+                                        if needed_letters:
+                                            for c in remaining_fodder:
+                                                needed_letters = needed_letters.replace(c,
+                                                                                        '',
+                                                                                        1)
+                                        continue
+
+                            # EXTRACT operation (extract letter as substitution)
+                            elif needed_letters:
+                                extracted_letter = None
+
+                                if 'first' in subtype.lower() and source_letters:
+                                    extracted_letter = source_letters[0]
+                                elif 'last' in subtype.lower() and source_letters:
+                                    extracted_letter = source_letters[-1]
+
+                                if extracted_letter and extracted_letter in needed_letters:
+                                    # Add indicator
+                                    word_roles.append(WordRole(
+                                        word, 'parts_indicator', '',
+                                        f"database ({subtype})"
+                                    ))
+                                    accounted_words.add(word_lower)
+
+                                    # Add source word with readable description
+                                    source_desc = 'last letter of' if 'last' in subtype.lower() else 'first letter of'
+                                    word_roles.append(WordRole(
+                                        source_word, 'substitution', extracted_letter,
+                                        source_desc
+                                    ))
+                                    accounted_words.add(source_word.lower())
+                                    words_used_by_parts.add(source_word.lower())
+
+                                    # Add to substitutions
+                                    found_substitutions.append((
+                                        source_word,
+                                        SubstitutionMatch(
+                                            word=source_word,
+                                            letters=extracted_letter,
+                                            category=source_desc
+                                        )
+                                    ))
+
+                                    # Update needed letters
+                                    needed_letters = needed_letters.replace(
+                                        extracted_letter, '', 1)
+                                    continue
                     except ValueError:
                         pass  # word not in remaining_words
 

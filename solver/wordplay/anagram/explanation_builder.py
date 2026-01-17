@@ -234,7 +234,11 @@ class ExplanationBuilder:
                 if wr.role == 'definition':
                     explanations.append(f'• "{word}" = definition for {likely_answer}')
                 elif wr.role == 'fodder':
-                    explanations.append(f'• "{word}" = anagram fodder')
+                    # Check if this is truncated fodder (has source like "minus last letter")
+                    if wr.source and 'minus' in wr.source.lower():
+                        explanations.append(f'• "{word}" = {wr.contributes} ({wr.source})')
+                    else:
+                        explanations.append(f'• "{word}" = anagram fodder')
                 elif wr.role == 'anagram_indicator':
                     explanations.append(f'• "{word}" = anagram indicator')
                 elif wr.role == 'substitution':
@@ -251,8 +255,15 @@ class ExplanationBuilder:
                 elif wr.role == 'container_indicator':
                     explanations.append(f'• "{word}" = container indicator')
                 elif wr.role == 'parts_indicator':
-                    # Extract subtype from source if available (e.g., "last_use" -> "last letter")
-                    if 'last' in wr.source.lower():
+                    # Extract subtype from source if available
+                    if 'delete' in wr.source.lower():
+                        if 'last' in wr.source.lower():
+                            explanations.append(f'• "{word}" = truncation indicator (remove last letter)')
+                        elif 'first' in wr.source.lower():
+                            explanations.append(f'• "{word}" = truncation indicator (remove first letter)')
+                        else:
+                            explanations.append(f'• "{word}" = truncation indicator')
+                    elif 'last' in wr.source.lower():
                         explanations.append(f'• "{word}" = last letter indicator')
                     elif 'first' in wr.source.lower():
                         explanations.append(f'• "{word}" = first letter indicator')
