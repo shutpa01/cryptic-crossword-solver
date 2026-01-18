@@ -882,25 +882,52 @@ if norm_letters(word) in def_words_lower:
 ## Pipeline Flow Summary
 
 ```
-CLUE INPUT
+CLUE INPUT (all clues)
     ↓
-resources.py: load_graph() - builds definition→answer lookup
+STAGE 1: Double Definition Check (dd_stage.py)
+    - Check if same candidate appears in 2+ definition windows
+    - If DD hit matches answer → record in stage_dd, EXIT pipeline (solved)
+    - If no DD hit → continue to next stage
     ↓
-definition_engine.py: generate_definition_windows() - creates possible definition phrases
+STAGE 2: Definition Candidates (definition_engine_edges.py)
+    - Generate definition windows from clue
+    - Look up candidates in graph
+    - Apply enumeration filtering
     ↓
-definition_engine_edges.py: definition_candidates() - looks up candidates in graph
+DEFINITION GATE CHECK
+    - If answer NOT in candidates → record in stage_definition_failed, SKIP
+    - If answer IN candidates → continue to wordplay stages
     ↓
-pipeline_simulator.py: GATE CHECK
-    - If answer NOT in candidates → SKIP (cannot solve)
-    - If answer IN candidates → CONTINUE
-    ↓
-anagram_stage.py: generate_anagram_hypotheses()
+STAGE 3: Anagram Detection (anagram_stage.py)
     - Brute force: try all word combinations for exact letter match
-    - If found → return hypothesis (WITHOUT indicator_words)
-    - If not found → anagram stage with indicators (WITH indicator_words)
+    - Evidence system: find indicator + contiguous fodder
+    - Record in stage_anagram
     ↓
-[Further stages: evidence analysis, compound analysis, explanation building]
+STAGE 4: Lurker Detection (lurker_stage.py)
+    - Check for hidden words spanning adjacent clue words
+    - Record in stage_lurker
+    ↓
+STAGE 5: Evidence Analysis (evidence_analysis.py)
+    - Score and rank candidates by wordplay evidence
+    - Record in stage_evidence
+    ↓
+STAGE 6: Compound Analysis (compound_wordplay_analyzer.py)
+    - Analyze word roles and build explanation
+    - Record in stage_compound
 ```
+
+### Pipeline Persistence Tables
+
+| Table | Purpose |
+|-------|---------|
+| stage_input | All clues at start of pipeline |
+| stage_dd | Double definition detection results |
+| stage_definition | Definition candidate lookup results |
+| stage_definition_failed | Clues that failed the definition gate |
+| stage_anagram | Anagram detection results |
+| stage_lurker | Lurker (hidden word) detection results |
+| stage_evidence | Evidence scoring and ranking results |
+| stage_compound | Final compound analysis and explanations |
 
 ---
 
@@ -1020,24 +1047,29 @@ anagram_stage.py: generate_anagram_hypotheses()
 ```
 CLUE INPUT: "Long-term plan targets unusual year (8)"
     ↓
-resources.py: load_graph()
+STAGE 1: dd_stage.py - Double Definition Check
+    → No DD hit (not a double definition clue)
+    → Continue to next stage
     ↓
-definition_engine_edges.py: definition_candidates()
+STAGE 2: definition_engine_edges.py: definition_candidates()
     → Returns candidates including STRATEGY
     ↓
-pipeline_simulator.py: GATE CHECK
+DEFINITION GATE CHECK
     → STRATEGY is in candidates, continue
     ↓
-anagram_stage.py: _generate_anagram_hypotheses_original()
+STAGE 3: anagram_stage.py: _generate_anagram_hypotheses_original()
     → Tries all word combinations
     → Finds: ["targets"] letters match STRATEGY
     → Returns: fodder_words=["targets"], unused_words=["Long-term","plan","unusual","year"]
     → Note: indicator_words not populated by brute force
     ↓
-evidence_analysis.py: apply_evidence_scoring()
+STAGE 4: lurker_stage.py - Lurker Check
+    → No lurker hit
+    ↓
+STAGE 5: evidence_analysis.py: apply_evidence_scoring()
     → Receives hypothesis, ranks candidates
     ↓
-compound_wordplay_analyzer.py: analyze_case()
+STAGE 6: compound_wordplay_analyzer.py: analyze_case()
     → Gets definition_window = "Long-term plan"
     → Gets fodder_words = ["targets"]
     → Calls _find_anagram_indicator()

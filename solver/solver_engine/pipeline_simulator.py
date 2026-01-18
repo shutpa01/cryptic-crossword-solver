@@ -356,8 +356,11 @@ def run_pipeline_probe(
     if run_id is not None:
         save_stage('input', run_id, input_records)
 
-    # ---- STAGE: DEFINITION ----
+    # ---- STAGE RECORDS ----
+    dd_stage_records = []
     definition_stage_records = []
+    definition_failed_records = []
+    lurker_stage_records = []
 
     for row in rows:
         clue_id, clue, enum, answer_raw, wp_type, source, puzzle_number = row
@@ -373,7 +376,7 @@ def run_pipeline_probe(
             "wordplay_type": wp_type,
         }
 
-        # ---- Double Definition ----
+        # ---- STAGE 1: Double Definition (checked FIRST) ----
         dd_hits = generate_dd_hypotheses(
             clue_text=clue,
             graph=graph,
@@ -385,7 +388,24 @@ def run_pipeline_probe(
             if len(norm_letters(h["answer"])) == total_len
         ]
 
-        # ---- Definition ----
+        # Check if DD found the correct answer
+        dd_answer_present = answer in {norm_letters(h["answer"]) for h in dd_hits}
+
+        # Save DD stage record
+        dd_stage_records.append({
+            'id': clue_id,
+            'clue_text': clue,
+            'answer': answer_raw,
+            'double_definition': dd_hits
+        })
+
+        # If DD found correct answer, count it and skip to next clue
+        if dd_answer_present:
+            overall["clues"] += 1
+            overall["clues_with_dd"] += 1
+            continue
+
+        # ---- STAGE 2: Definition ----
         def_result = definition_candidates(
             clue_text=clue,
             enumeration=enum,
@@ -444,11 +464,18 @@ def run_pipeline_probe(
         # ---- DEFINITION GATE: Skip if answer not in candidates ----
         # Cannot solve if correct answer isn't even a candidate
         if not definition_answer_present:
+            # Save to definition_failed for debugging
+            definition_failed_records.append({
+                'id': clue_id,
+                'clue_text': clue,
+                'answer': answer_raw,
+                'definition_candidates': flat_candidates
+            })
             overall["clues"] += 1
             overall["gate_failed"] += 1
             continue
 
-        # ---- Anagrams ----
+        # ---- STAGE 3: Anagrams ----
         anag_hits = generate_anagram_hypotheses(
             clue_text=clue,
             enumeration=enum,  # Pass raw enumeration - anagram_stage now normalizes it
@@ -495,14 +522,23 @@ def run_pipeline_probe(
             elif analysis["anagram_evidence"]["evidence_type"] == "deletion":
                 overall["successful_deletion"] += 1
 
-        # ---- Lurkers ----
+        # ---- STAGE 4: Lurkers ----
         lurk_hits = generate_lurker_hypotheses(
             clue_text=clue,
             enumeration=total_len,
             candidates=flat_candidates,
         )
 
+        # Save lurker stage record
+        lurker_stage_records.append({
+            'id': clue_id,
+            'clue_text': clue,
+            'answer': answer_raw,
+            'lurkers': lurk_hits
+        })
+
         # ---- HIT CLASSIFICATION (REPORTING ONLY) ----
+        # Note: DD clues already exited the pipeline earlier
         hit_types = []
         if windows_with_hits:
             hit_types.append("definition")
@@ -510,8 +546,6 @@ def run_pipeline_probe(
             hit_types.append("anagram")
         if lurk_hits:
             hit_types.append("lurker")
-        if dd_hits:
-            hit_types.append("dd")
 
         hit_any = bool(hit_types)
 
@@ -522,8 +556,6 @@ def run_pipeline_probe(
             overall["clues_with_anagram"] += 1
         if lurk_hits:
             overall["clues_with_lurker"] += 1
-        if dd_hits:
-            overall["clues_with_dd"] += 1
 
         # Reporting filter: show only clues where answer is NOT in definition candidates
         # (unless SINGLE_CLUE_MATCH is explicitly set)
@@ -536,7 +568,6 @@ def run_pipeline_probe(
             "definition_candidates": len(set(flat_candidates)),
             "anagram_hits": len(anag_hits),
             "lurker_hits": len(lurk_hits),
-            "double_definition_hits": len(dd_hits),
             "hit_any": hit_any,
             "hit_types": hit_types,
             "answer_in_definition_candidates": definition_answer_present,
@@ -548,19 +579,18 @@ def run_pipeline_probe(
         record["definition_answer_present"] = definition_answer_present
         record["anagrams"] = anag_hits
         record["lurkers"] = lurk_hits
-        record["double_definition"] = dd_hits
 
         results.append(record)
 
     conn.close()
 
-    # ---- SAVE DEFINITION STAGE ----
+    # ---- SAVE STAGES ----
     if run_id is not None:
+        save_stage('dd', run_id, dd_stage_records)
         save_stage('definition', run_id, definition_stage_records)
-
-    # ---- SAVE ANAGRAM STAGE ----
-    if run_id is not None:
+        save_stage('definition_failed', run_id, definition_failed_records)
         save_stage('anagram', run_id, results)
+        save_stage('lurker', run_id, lurker_stage_records)
 
     # Add forwarded analysis to overall stats
     overall["forwarded_anagram_cases"] = forwarded_anagram_cases
@@ -580,12 +610,13 @@ if __name__ == "__main__":
 
     print("\n=== PIPELINE SIMULATOR ===")
     print("POPULATION SUMMARY:")
-    print(f"  clues processed           : {overall['clues']}")
+    total_processed = overall['clues'] + overall['clues_with_dd']
+    print(f"  clues processed           : {total_processed}")
+    print(f"  clues w/ DD hit           : {overall['clues_with_dd']} (exit pipeline)")
     print(f"  gate failed (no def match): {overall['gate_failed']}")
     print(f"  clues w/ def answer match : {overall['clues_with_def_match']}")
     print(f"  clues w/ anagram hit      : {overall['clues_with_anagram']}")
     print(f"  clues w/ lurker hit       : {overall['clues_with_lurker']}")
-    print(f"  clues w/ DD hit           : {overall['clues_with_dd']}")
 
     # NEW: Forwarded anagram analysis section
     if ANALYZE_FORWARDED_ANAGRAMS and overall.get("forwarded_anagram_cases"):
@@ -666,10 +697,6 @@ if __name__ == "__main__":
             for h in r["lurkers"]:
                 print(f"      {h}")
 
-        if r["double_definition"]:
-            print("    DOUBLE-DEFINITION HITS:")
-            for h in r["double_definition"]:
-                print(f"      {h}")
         print(f"    WINDOW → CANDIDATES: {r['window_support']}")
 
         print("    ALL WINDOWS → CANDIDATES:")
