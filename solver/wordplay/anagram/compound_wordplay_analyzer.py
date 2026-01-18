@@ -402,17 +402,24 @@ class CompoundWordplayAnalyzer:
             explainer = ExplanationBuilder()
             return explainer.build_fallback(case, clue_words, db_answer)
 
-        # Use top ranked candidate - THIS is our likely answer
-        top_candidate = scored_candidates[0]
-        evidence = top_candidate.get('evidence')
+        # Find the first candidate WITH evidence (not just highest scored)
+        # A candidate might rank high from definition_support but have no wordplay evidence
+        top_candidate = None
+        evidence = None
+        for sc in scored_candidates:
+            if sc.get('evidence'):
+                top_candidate = sc
+                evidence = sc.get('evidence')
+                break
 
-        if not evidence:
+        if not top_candidate or not evidence:
+            # No candidates have evidence - fall back
             # Lazy import to avoid circular dependency
             from solver.wordplay.anagram.explanation_builder import ExplanationBuilder
             explainer = ExplanationBuilder()
             return explainer.build_fallback(case, clue_words, db_answer)
 
-        # LIKELY ANSWER comes from the matched candidate, not database
+        # LIKELY ANSWER comes from the matched candidate with evidence
         likely_answer = top_candidate.get('candidate', '').upper().replace(' ', '')
 
         # Get definition from pipeline data (needed for indicator inference)
