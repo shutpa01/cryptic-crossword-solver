@@ -13,6 +13,7 @@ Separated from compound_wordplay_analyzer.py to maintain separation of concerns:
 - Presentation (this file) - building explanations, formatting output
 """
 
+import re
 import sys
 from typing import List, Dict, Any, Optional
 
@@ -23,6 +24,41 @@ from solver.solver_engine.resources import norm_letters
 from solver.wordplay.anagram.compound_wordplay_analyzer import (
     WordRole, CompoundWordplayAnalyzer
 )
+
+
+def format_answer_with_enumeration(answer: str, enumeration: str) -> str:
+    """
+    Format answer with spaces according to enumeration.
+
+    Example: format_answer_with_enumeration("PATROLCAR", "(6,3)") → "PATROL CAR"
+    Example: format_answer_with_enumeration("INSPITEOFTHAT", "(2,5,2,4)") → "IN SPITE OF THAT"
+    """
+    if not answer or not enumeration:
+        return answer
+
+    # Extract numbers from enumeration like (6,3) or (2,4,3)
+    parts = re.findall(r'\d+', enumeration)
+
+    if not parts or len(parts) == 1:
+        return answer  # Single word, no formatting needed
+
+    # Remove any existing spaces from answer for clean formatting
+    clean_answer = answer.replace(' ', '')
+
+    # Verify total length matches
+    expected_len = sum(int(p) for p in parts)
+    if len(clean_answer) != expected_len:
+        return answer  # Length mismatch, return as-is
+
+    # Insert spaces at the right positions
+    result = []
+    pos = 0
+    for length in parts:
+        length = int(length)
+        result.append(clean_answer[pos:pos + length])
+        pos += length
+
+    return ' '.join(result)
 
 
 class ExplanationBuilder:
@@ -152,6 +188,10 @@ class ExplanationBuilder:
 
         Uses likely_answer (from matched candidate), NOT database answer.
         """
+        # Format likely_answer with spaces for multi-word answers
+        enumeration = case.get('enumeration', '')
+        likely_answer = format_answer_with_enumeration(likely_answer, enumeration)
+
         # Get substitutions from compound solution
         subs = []
         if compound_solution and compound_solution.get('substitutions'):
@@ -161,6 +201,10 @@ class ExplanationBuilder:
         additional_fodder = []
         if compound_solution and compound_solution.get('additional_fodder'):
             additional_fodder = compound_solution['additional_fodder']
+
+        # Check for deletion_source contributions in word_roles
+        deletion_sources = [(wr.word, wr.contributes, wr.source) 
+                           for wr in word_roles if wr.role == 'deletion_source']
 
         # Build fodder part - include both original and additional fodder
         all_fodder_words = list(fodder_words) if fodder_words else []
@@ -180,6 +224,10 @@ class ExplanationBuilder:
                 formula = f"anagram({fodder_part}) - {letters} ({word}) = {likely_answer}"
             else:
                 formula = f"anagram({fodder_part}) - {excess} = {likely_answer}"
+        elif deletion_sources:
+            # Orphaned deletion case - deletion_source found via word_roles
+            del_part = ' + '.join(f"{letters} ({word})" for word, letters, _ in deletion_sources)
+            formula = f"{del_part} + anagram({fodder_part}) = {likely_answer}"
         elif compound_solution and compound_solution.get('operation') == 'reduced_fodder':
             # Reduced fodder with substitution - show the corrected fodder
             reduced = compound_solution.get('reduced_fodder', '')
@@ -219,12 +267,48 @@ class ExplanationBuilder:
         explanations = []
         # Use norm_letters for lookup to handle punctuation (e.g., "gate," matches "gate")
         role_lookup = {norm_letters(wr.word): wr for wr in word_roles}
+        
+        # Also build a lookup for phrase roles (roles where word contains space)
+        phrase_role_lookup = {}
+        for wr in word_roles:
+            if ' ' in wr.word:
+                # Store by normalized form of the phrase
+                phrase_key = norm_letters(wr.word)
+                phrase_role_lookup[phrase_key] = wr
+        
         explained_words = set()
+        skip_next = 0  # Number of words to skip (for phrase matches)
 
-        for word in clue_words:
+        for i, word in enumerate(clue_words):
+            # Skip if this word was part of a previous phrase match
+            if skip_next > 0:
+                skip_next -= 1
+                continue
+                
             word_norm = norm_letters(word)
 
             if word_norm in explained_words:
+                continue
+
+            # First check for phrase matches (current word + next word(s))
+            phrase_matched = False
+            if i < len(clue_words) - 1:
+                # Try two-word phrase
+                two_word_phrase = f"{word} {clue_words[i+1]}"
+                two_word_norm = norm_letters(two_word_phrase)
+                if two_word_norm in phrase_role_lookup:
+                    wr = phrase_role_lookup[two_word_norm]
+                    explained_words.add(two_word_norm)
+                    
+                    if wr.role == 'substitution':
+                        explanations.append(f'• "{two_word_phrase.lower()}" = {wr.contributes} ({wr.source})')
+                    else:
+                        explanations.append(f'• "{two_word_phrase.lower()}" = {wr.role}')
+                    
+                    skip_next = 1  # Skip the next word
+                    phrase_matched = True
+            
+            if phrase_matched:
                 continue
 
             if word_norm in role_lookup:
@@ -236,7 +320,8 @@ class ExplanationBuilder:
                 elif wr.role == 'fodder':
                     # Check if this is truncated fodder (has source like "minus last letter")
                     if wr.source and 'minus' in wr.source.lower():
-                        explanations.append(f'• "{word}" = {wr.contributes} ({wr.source})')
+                        explanations.append(
+                            f'• "{word}" = {wr.contributes} ({wr.source})')
                     else:
                         explanations.append(f'• "{word}" = anagram fodder')
                 elif wr.role == 'anagram_indicator':
@@ -247,20 +332,34 @@ class ExplanationBuilder:
                     explanations.append(f'• "{word}" = {wr.contributes} (to be removed)')
                 elif wr.role == 'deletion_indicator':
                     explanations.append(f'• "{word}" = deletion indicator')
+                elif wr.role == 'deletion_source':
+                    explanations.append(f'• "{word}" = {wr.contributes} ({wr.source})')
                 elif wr.role == 'positional_indicator':
                     explanations.append(
                         f'• "{word}" = positional indicator (construction order)')
                 elif wr.role == 'insertion_indicator':
                     explanations.append(f'• "{word}" = insertion indicator')
+                elif wr.role == 'insertion_material':
+                    explanations.append(f'• "{word}" = {wr.contributes} (inserted)')
                 elif wr.role == 'container_indicator':
                     explanations.append(f'• "{word}" = container indicator')
+                elif wr.role == 'operation_indicator':
+                    # Extract operation type from source (e.g., "database (container)")
+                    if 'container' in wr.source.lower():
+                        explanations.append(f'• "{word}" = container indicator')
+                    elif 'insertion' in wr.source.lower():
+                        explanations.append(f'• "{word}" = insertion indicator')
+                    else:
+                        explanations.append(f'• "{word}" = operation indicator')
                 elif wr.role == 'parts_indicator':
                     # Extract subtype from source if available
                     if 'delete' in wr.source.lower():
                         if 'last' in wr.source.lower():
-                            explanations.append(f'• "{word}" = truncation indicator (remove last letter)')
+                            explanations.append(
+                                f'• "{word}" = truncation indicator (remove last letter)')
                         elif 'first' in wr.source.lower():
-                            explanations.append(f'• "{word}" = truncation indicator (remove first letter)')
+                            explanations.append(
+                                f'• "{word}" = truncation indicator (remove first letter)')
                         else:
                             explanations.append(f'• "{word}" = truncation indicator')
                     elif 'last' in wr.source.lower():
@@ -276,6 +375,24 @@ class ExplanationBuilder:
                     if '_indicator' in wr.role:
                         ind_type = wr.role.replace('_indicator', '')
                         explanations.append(f'• "{word}" = {ind_type} indicator')
+
+        # Add any unaccounted words at the end
+        for word in clue_words:
+            word_norm = norm_letters(word)
+            if word_norm and word_norm not in explained_words:
+                # Check if it's part of a phrase we already explained
+                already_in_phrase = False
+                for explained in explained_words:
+                    if word_norm in explained:
+                        already_in_phrase = True
+                        break
+                
+                if not already_in_phrase:
+                    # Check if it's a common link word
+                    if word_norm in self.link_words:
+                        explanations.append(f'• "{word}" = link word')
+                    else:
+                        explanations.append(f'• "{word}" = wordplay connector')
 
         return {
             'formula': formula,
@@ -331,10 +448,14 @@ class ExplanationBuilder:
     def build_fallback(self, case: Dict[str, Any],
                        clue_words: List[str], db_answer: str) -> Dict[str, Any]:
         """Fallback when no evidence available."""
+        # Format db_answer with spaces for multi-word enumerations
+        enumeration = case.get('enumeration', '')
+        db_answer_formatted = format_answer_with_enumeration(db_answer, enumeration)
+
         return {
             'clue': case.get('clue', ''),
             'likely_answer': '',  # No likely answer - couldn't solve
-            'db_answer': db_answer,  # For comparison only
+            'db_answer': db_answer_formatted,  # For comparison only
             'answer_matches': False,
             'word_roles': [],
             'definition_window': None,
@@ -363,7 +484,7 @@ class ExplanationSystemBuilder:
         self.analyzer.close()
 
     def enhance_pipeline_data(self, evidence_enhanced_cases: List[Dict[str, Any]]) -> \
-    List[Dict[str, Any]]:
+            List[Dict[str, Any]]:
         """
         Process evidence-enhanced cases through compound analysis.
         """

@@ -1,4 +1,5 @@
 # CRYPTIC SOLVER PIPELINE DOCUMENTATION
+API KEY API Key:
 
 ## Overview
 
@@ -1102,4 +1103,222 @@ OUTPUT:
 **The fix:** `_find_anagram_indicator()` now skips both fodder AND definition words when searching for indicators. Since we know the definition and fodder by the time compound stage runs, the indicator MUST be in the remaining words.
 
 **Verified with:** "Long-term plan targets unusual year (8)" - now correctly identifies "unusual" as the anagram indicator.
-3. Include `indicator_words` in the returned hypothesis
+
+---
+
+## NEW: Indicator Frequency System
+
+**Purpose:** Rank indicators by empirical frequency from actual corpus data, enabling the system to prefer common indicators over rare ones.
+
+**Problem solved:** Clue "Tear delicate fabric – tear badly (8)" → LACERATE
+- Both "tear" and "badly" are valid anagram indicators in the database
+- "tear" appeared first in the clue, so it was incorrectly selected
+- "badly" is a MUCH more common anagram indicator than "tear"
+
+### Database Schema Change
+
+Added `frequency` column to `indicators` table:
+```sql
+ALTER TABLE indicators ADD COLUMN frequency INTEGER DEFAULT 0;
+```
+
+### Confidence Tiers
+
+Confidence levels are now set based on percentile ranking:
+- `very_high`: top 10% by frequency
+- `high`: top 25% by frequency
+- `medium`: top 50% by frequency
+- `low`: bottom 50% by frequency (or never found in corpus)
+
+### Analysis Script: `analyze_indicator_frequency.py`
+
+**What it does:**
+1. Queries all ANAGRAM clues from `clues` table
+2. For each clue, finds fodder words that anagram to the answer
+3. Looks at adjacent words (skipping link words like "in", "to", "of")
+4. Tallies indicators found adjacent to fodder
+5. Updates `frequency` column in indicators table
+6. Optionally updates `confidence` based on percentile thresholds
+
+**Usage:**
+```bash
+# Dry run - show what would happen
+python analyze_indicator_frequency.py
+
+# Apply changes to database
+python analyze_indicator_frequency.py --apply --update-confidence
+
+# Show current rankings from DB
+python analyze_indicator_frequency.py --show --top 100
+```
+
+**Top indicators by frequency (from ~18,000 anagram clues):**
+- out: 278
+- drunk: 136
+- criminal: 126
+- badly: 67
+- ...
+
+### Code Changes
+
+**1. `IndicatorMatch` class (compound_wordplay_analyzer.py):**
+```python
+@dataclass
+class IndicatorMatch:
+    word: str
+    wordplay_type: str
+    subtype: Optional[str]
+    confidence: str
+    frequency: int = 0  # NEW: Empirical frequency
+```
+
+**2. `lookup_indicator()` method:**
+- Now queries `COALESCE(frequency, 0)` from DB
+- Orders results by `frequency DESC`
+- Returns the highest frequency match
+
+**3. `_find_anagram_indicator()` method:**
+- Collects ALL matching indicators (instead of returning first found)
+- Sorts by frequency descending
+- Returns the highest frequency indicator
+- Two-word indicators get +10 boost (more specific)
+
+**4. `calculate_anagram_score_boost()` method (anagram_evidence_system.py):**
+- NEW: Adds indicator confidence boost:
+  - `very_high`: +15 points
+  - `high`: +10 points
+  - `medium`: +5 points
+  - `low`: +0 points
+- NEW: Adds frequency-based bonus:
+  - freq > 50: +5 points
+  - freq > 20: +2 points
+
+**Result:** "Tear delicate fabric – tear badly" now correctly selects "badly" (freq: 67, very_high) over "tear" (freq: 0, low) as the anagram indicator.
+
+---
+
+## NEW: Self-Learning System
+
+**Purpose:** Track partially solved clues to identify gaps in synonym/substitution data.
+
+**Problem:** Clue "Pet belonging to us feeds at five, roughly (9)" → FAVOURITE
+- System finds: anagram(AT + FIVE) = 6 letters
+- Missing: 3 letters (OUR)
+- Unresolved words: ['belonging', 'to', 'us', 'feeds']
+- Human insight: "us" → "OUR" is missing from synonyms_pairs
+
+### Database Schema Changes
+
+Added to `stage_compound` table:
+```sql
+ALTER TABLE stage_compound ADD COLUMN letters_still_needed TEXT;
+ALTER TABLE stage_compound ADD COLUMN unresolved_words TEXT;
+```
+
+### Data Captured
+
+For partially resolved clues, the system now stores:
+- `letters_still_needed`: The missing letters (e.g., "our")
+- `unresolved_words`: Words that might supply those letters (e.g., ['belonging', 'to', 'us', 'feeds'])
+- `fully_resolved`: Boolean flag (False when letters_still_needed is non-empty)
+
+### Display Output
+
+When a clue is partially solved:
+```
+COMPOUND SOLUTION:
+  Fully resolved: False
+  Indicator and fodder unaccounted for: OUR from ['belonging', 'to', 'us', 'feeds']
+```
+
+### Self-Learning Query
+
+Find patterns for database enrichment:
+```sql
+SELECT clue_text, answer, letters_still_needed, unresolved_words
+FROM stage_compound
+WHERE fully_resolved = 0
+  AND letters_still_needed != ''
+  AND unresolved_words != '[]';
+```
+
+**Future automation:** A job can analyze patterns like:
+- When "us" appears and "OUR" is needed → add to synonyms_pairs
+- When "belonging to us" appears → check if phrase = "OUR"
+- Verify by re-running clue after database update
+
+---
+
+## NEW: Evidence Scoring Improvements
+
+### Zero Score for Invalid Fodder
+
+**Problem:** Candidates like PLUMMET scored highly when fodder was just "7" (the enumeration).
+
+**Fix in `calculate_anagram_score_boost()`:**
+```python
+# Return 0.0 early if no legitimate fodder
+if not evidence.fodder_letters or evidence.confidence == 0.0:
+    return 0.0
+
+# Reject if fodder_words only contains enumeration
+real_fodder = [w for w in fodder_words
+              if not w.strip('()[]').replace(',','').replace('-','').isdigit()]
+if not real_fodder:
+    return 0.0
+```
+
+### Definition Bonus Guard
+
+**Problem:** Candidates could score highly on definition match alone, without legitimate anagram evidence.
+
+**Fix:** Only add definition support bonus if `evidence_score > 0`:
+```python
+# ONLY add if there's already legitimate anagram evidence
+if definition_support and evidence_score > 0:
+    # ... add definition bonus
+```
+
+---
+
+## NEW: Acrostic Indicator Priority Fix
+
+**Problem:** "finally" was in `positional_words` set and was checked BEFORE the indicator database, so it was never recognized as an acrostic indicator.
+
+**Clue:** "Wind instrument finally playing a rondo (7)" → TORNADO
+- "finally" should extract T from "instrument" (last letter)
+- System was treating "finally" as a positional word, not an indicator
+
+**Fix:** Reordered checks in compound_wordplay_analyzer.py:
+1. Check indicator database FIRST
+2. If match is acrostic type with 'initial' or 'final' subtype → handle as letter extractor
+3. Only check positional_words as FALLBACK if not already handled
+
+**Also added:** Check PREVIOUS word for acrostic source (not just next word):
+- "instrument finally" → "finally" at index 1, "instrument" at index 0
+
+---
+
+## Files Modified (Recent Session)
+
+| File | Changes |
+|------|---------|
+| compound_wordplay_analyzer.py | IndicatorMatch.frequency, lookup_indicator() frequency ordering, _find_anagram_indicator() frequency preference, self-learning tracking, acrostic fix |
+| anagram_evidence_system.py | indicator_frequency dict, calculate_anagram_score_boost() confidence/frequency boost, zero score guard, definition bonus guard |
+| anagram_analysis.py | Self-learning display output |
+| pipeline_persistence.py | Schema changes for letters_still_needed, unresolved_words |
+| analyze_indicator_frequency.py | NEW: Corpus analysis script for indicator frequency |
+
+---
+
+## Patches Created (Recent Session)
+
+| Patch | Purpose |
+|-------|---------|
+| compound_wordplay_analyzer_frequency.patch | Frequency-based indicator selection |
+| anagram_evidence_system_frequency.patch | Frequency/confidence scoring boost |
+| compound_wordplay_analyzer_positional_fix.patch | Acrostic indicator priority |
+| compound_wordplay_analyzer_self_learning_only.patch | Self-learning data tracking |
+| anagram_analysis_self_learning.patch | Self-learning display |
+| pipeline_persistence_self_learning.patch | Database schema for self-learning |
+| anagram_evidence_system_zero_score.patch | Zero score for invalid fodder |

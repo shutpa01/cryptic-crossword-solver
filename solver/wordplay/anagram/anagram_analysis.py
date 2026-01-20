@@ -209,7 +209,7 @@ def display_compound_results(compound_results, max_display=10):
         breakdown = explanation.get('breakdown', [])
 
         print(f"    QUALITY: {quality}")
-        print(f"\n    FORMULA: {formula}")
+        print(f"\n    WORDPLAY: {formula}")
 
         if breakdown:
             print(f"\n    BREAKDOWN:")
@@ -242,10 +242,19 @@ def display_compound_results(compound_results, max_display=10):
 
             print(f"      Fully resolved: {compound_sol.get('fully_resolved', False)}")
 
-        # Remaining unresolved
+        # Show unaccounted indicator/fodder for self-learning
+        if compound_sol:
+            letters_needed = compound_sol.get('letters_still_needed', '')
+            unresolved_words = compound_sol.get('unresolved_words', [])
+            if letters_needed and unresolved_words:
+                print(f"    Indicator and fodder unaccounted for: {letters_needed.upper()} from {unresolved_words}")
+            elif letters_needed:
+                print(f"    Letters unaccounted for: {letters_needed.upper()}")
+
+        # Remaining unresolved (legacy field)
         remaining = result.get('remaining_unresolved', [])
         if remaining:
-            print(f"\n    STILL UNRESOLVED: {remaining}")
+            print(f"    STILL UNRESOLVED: {remaining}")
 
         print("-" * 80)
 

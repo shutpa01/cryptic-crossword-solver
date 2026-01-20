@@ -107,7 +107,8 @@ LINK_WORDS = {
     # Other common links
     'this', 'these', 'those', 'such', 'one', 'ones', 'some', 'any', 'all',
     'here', 'there', 'into', 'onto', 'within', 'without',
-    'find', 'found', 'finding', 'show', 'showing', 'put', 'set',
+    # Note: 'find', 'found', 'finding' removed - they can be part of container indicators like "found in"
+    'show', 'showing', 'put', 'set',
     'if', 'how', 'why', 'who', 'whom', 'you',
 }
 
@@ -133,8 +134,9 @@ class ComprehensiveWordplayDetector:
         self.hidden_indicators = []
         self.parts_indicators = []
 
-        # Store confidence levels
+        # Store confidence levels and frequency
         self.indicator_confidence = {}
+        self.indicator_frequency = {}
         self.indicators_loaded = False
 
         self._load_all_indicators_from_database()
@@ -146,24 +148,20 @@ class ComprehensiveWordplayDetector:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            # Load all indicators with their types and confidence
+            # Load all indicators with their types, confidence and frequency
             cursor.execute("""
-                SELECT word, wordplay_type, confidence FROM indicators 
-                ORDER BY 
-                    CASE confidence 
-                        WHEN 'high' THEN 3
-                        WHEN 'medium' THEN 2  
-                        WHEN 'low' THEN 1
-                        ELSE 0
-                    END DESC, word
+                SELECT word, wordplay_type, confidence, COALESCE(frequency, 0) as freq 
+                FROM indicators 
+                ORDER BY freq DESC, word
             """)
 
             all_indicators = cursor.fetchall()
 
             # Organize by wordplay type
-            for word, wordplay_type, confidence in all_indicators:
+            for word, wordplay_type, confidence, frequency in all_indicators:
                 word_lower = word.lower().strip()
                 self.indicator_confidence[word_lower] = confidence
+                self.indicator_frequency[word_lower] = frequency or 0
 
                 if wordplay_type == 'anagram':
                     self.anagram_indicators.append(word_lower)
@@ -220,6 +218,83 @@ class ComprehensiveWordplayDetector:
         self.hidden_indicators = ['in', 'within', 'part of', 'some', 'hidden in',
                                   'concealed']
         self.parts_indicators = ['initially', 'first', 'finally', 'last', 'head', 'tail']
+
+    def lookup_wordplay_substitutions(self, words: List[str], needed_letters: str) -> List[Tuple[str, str, str]]:
+        """
+        Look up wordplay substitutions for given words that could provide needed letters.
+        
+        Checks both single words and two-word phrases (e.g., "the french" -> LA).
+        
+        Args:
+            words: List of remaining clue words to check
+            needed_letters: Letters still needed to complete the anagram
+            
+        Returns:
+            List of (phrase, substitution, category) tuples where substitution 
+            provides some or all of needed_letters
+        """
+        if not words or not needed_letters:
+            return []
+        
+        results = []
+        needed_counter = Counter(needed_letters.lower())
+        
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check single words
+            for word in words:
+                word_clean = word.lower().strip()
+                cursor.execute("""
+                    SELECT indicator, substitution, category FROM wordplay
+                    WHERE LOWER(indicator) = ?
+                """, (word_clean,))
+                
+                for indicator, substitution, category in cursor.fetchall():
+                    sub_letters = ''.join(c.lower() for c in substitution if c.isalpha())
+                    sub_counter = Counter(sub_letters)
+                    
+                    # Check if substitution provides letters we need
+                    provides_needed = True
+                    for letter, count in sub_counter.items():
+                        if needed_counter[letter] < count:
+                            provides_needed = False
+                            break
+                    
+                    if provides_needed and sub_letters:
+                        results.append((indicator, substitution.upper(), category))
+            
+            # Check two-word phrases (e.g., "the french" -> LA)
+            for i in range(len(words) - 1):
+                phrase = f"{words[i].lower().strip()} {words[i+1].lower().strip()}"
+                cursor.execute("""
+                    SELECT indicator, substitution, category FROM wordplay
+                    WHERE LOWER(indicator) = ?
+                """, (phrase,))
+                
+                for indicator, substitution, category in cursor.fetchall():
+                    sub_letters = ''.join(c.lower() for c in substitution if c.isalpha())
+                    sub_counter = Counter(sub_letters)
+                    
+                    # Check if substitution provides letters we need
+                    provides_needed = True
+                    for letter, count in sub_counter.items():
+                        if needed_counter[letter] < count:
+                            provides_needed = False
+                            break
+                    
+                    if provides_needed and sub_letters:
+                        results.append((indicator, substitution.upper(), category))
+            
+            conn.close()
+            
+        except Exception as e:
+            # Silently fail - substitution lookup is an enhancement, not critical
+            pass
+        
+        return results
 
     def normalize_letters(self, text: str) -> str:
         """Extract and lowercase only alphabetic characters."""
@@ -436,18 +511,19 @@ class ComprehensiveWordplayDetector:
             if token_lower in self.parts_indicators:
                 found['parts'].append(token)
 
-        # Second pass: two-word anagram indicators (only if no single-word found)
-        if not found['anagram_matches']:
-            for i in range(len(tokens) - 1):
-                two_word = f"{tokens[i].lower().strip('.,;:!?\"')} {tokens[i + 1].lower().strip('.,;:!?\"')}"
-                if two_word in self.anagram_indicators_two_word:
-                    found['anagram'].append(f"{tokens[i]} {tokens[i + 1]}")
-                    found['anagram_matches'].append(IndicatorMatch(
-                        words=[tokens[i], tokens[i + 1]],
-                        start_pos=i,
-                        end_pos=i + 1,
-                        is_multi_word=True
-                    ))
+        # Second pass: two-word anagram indicators (ALWAYS check, not just fallback)
+        # Both single-word and two-word indicators should be found so contiguity
+        # logic can choose the best one based on proximity to fodder
+        for i in range(len(tokens) - 1):
+            two_word = f"{tokens[i].lower().strip('.,;:!?\"')} {tokens[i + 1].lower().strip('.,;:!?\"')}"
+            if two_word in self.anagram_indicators_two_word:
+                found['anagram'].append(f"{tokens[i]} {tokens[i + 1]}")
+                found['anagram_matches'].append(IndicatorMatch(
+                    words=[tokens[i], tokens[i + 1]],
+                    start_pos=i,
+                    end_pos=i + 1,
+                    is_multi_word=True
+                ))
 
         return found
 
@@ -1002,24 +1078,138 @@ class ComprehensiveWordplayDetector:
                             else:
                                 remaining_words.append(t)
 
+                        # NEW: Check if remaining words can provide needed letters via wordplay
+                        # This detects compound evidence like "THE FRENCH" -> LA
+                        compound_subs = []
+                        compound_evidence_type = "partial"
+                        compound_confidence = confidence
+                        letters_still_needed = remaining_letters
+                        
+                        if remaining_letters and remaining_words:
+                            # Check wordplay table for substitutions
+                            subs = self.lookup_wordplay_substitutions(remaining_words, remaining_letters)
+                            
+                            if subs:
+                                # Try to find substitution(s) that complete the needed letters
+                                temp_needed = remaining_letters.lower()
+                                
+                                for phrase, sub_letters, category in subs:
+                                    sub_lower = sub_letters.lower()
+                                    
+                                    # Check if this substitution's letters are all still needed
+                                    temp_check = temp_needed
+                                    can_use = True
+                                    for c in sub_lower:
+                                        if c in temp_check:
+                                            temp_check = temp_check.replace(c, '', 1)
+                                        else:
+                                            can_use = False
+                                            break
+                                    
+                                    if can_use:
+                                        compound_subs.append((phrase, sub_letters, category))
+                                        temp_needed = temp_check
+                                        
+                                        if debug:
+                                            print(f"           ★ COMPOUND: '{phrase}' -> {sub_letters} ({category})")
+                                
+                                letters_still_needed = temp_needed
+                                
+                                # If we found substitutions that explain ALL remaining letters
+                                if not letters_still_needed:
+                                    compound_evidence_type = "compound"
+                                    compound_confidence = 0.95  # High confidence for complete compound
+                                    # Massive bonus for complete compound evidence
+                                    evidence_score += 75
+                                    
+                                    if debug:
+                                        print(f"           ★★ COMPLETE COMPOUND EVIDENCE! New score: {evidence_score:.2f}")
+                                elif len(letters_still_needed) < len(remaining_letters):
+                                    # Partial compound - some letters explained
+                                    evidence_score += 25
+                                    compound_confidence = (len(candidate_letters) - len(letters_still_needed)) / len(candidate_letters)
+
+                        # NEW: Check if remaining words can provide needed letters via wordplay
+                        # This detects compound evidence like "THE FRENCH" -> LA
+                        compound_subs = []
+                        compound_evidence_type = "partial"
+                        compound_confidence = confidence
+                        letters_still_needed = remaining_letters
+                        
+                        if remaining_letters:
+                            # Combine remaining_words and link_words in original clue order
+                            # This is needed because "the french" -> LA requires "the" which may be a link word
+                            all_unused_words = []
+                            used_words = fodder_word_set | indicator_word_set
+                            for t in tokens:
+                                if t.lower() not in used_words:
+                                    all_unused_words.append(t)
+                            
+                            if all_unused_words:
+                                # Check wordplay table for substitutions
+                                subs = self.lookup_wordplay_substitutions(all_unused_words, remaining_letters)
+                                
+                                if subs:
+                                    # Try to find substitution(s) that complete the needed letters
+                                    temp_needed = remaining_letters.lower()
+                                    
+                                    for phrase, sub_letters, category in subs:
+                                        sub_lower = sub_letters.lower()
+                                        
+                                        # Check if this substitution's letters are all still needed
+                                        temp_check = temp_needed
+                                        can_use = True
+                                        for c in sub_lower:
+                                            if c in temp_check:
+                                                temp_check = temp_check.replace(c, '', 1)
+                                            else:
+                                                can_use = False
+                                                break
+                                        
+                                        if can_use:
+                                            compound_subs.append((phrase, sub_letters, category))
+                                            temp_needed = temp_check
+                                            
+                                            if debug:
+                                                print(f"           ★ COMPOUND: '{phrase}' -> {sub_letters} ({category})")
+                                    
+                                    letters_still_needed = temp_needed
+                                    
+                                    # If we found substitutions that explain ALL remaining letters
+                                    if not letters_still_needed:
+                                        compound_evidence_type = "compound"
+                                        compound_confidence = 0.95  # High confidence for complete compound
+                                        # Massive bonus for complete compound evidence
+                                        evidence_score += 75
+                                        
+                                        if debug:
+                                            print(f"           ★★ COMPLETE COMPOUND EVIDENCE! New score: {evidence_score:.2f}")
+                                    elif len(letters_still_needed) < len(remaining_letters):
+                                        # Partial compound - some letters explained
+                                        evidence_score += 25
+                                        compound_confidence = (len(candidate_letters) - len(letters_still_needed)) / len(candidate_letters)
+
                         best_evidence = AnagramEvidence(
                             candidate=candidate,
                             fodder_words=list(fodder.words),
                             fodder_letters=fodder_letters,
-                            evidence_type="partial",
-                            confidence=confidence,
-                            needed_letters=remaining_letters,
+                            evidence_type=compound_evidence_type,
+                            confidence=compound_confidence,
+                            needed_letters=letters_still_needed,
                             indicator_words=indicator_words,
                             indicator_position=fodder.indicator.start_pos,
                             link_words=link_words_found,
                             remaining_words=remaining_words,
                             unused_clue_words=remaining_words  # Backward compatibility
                         )
+                        # Store compound substitutions for downstream use
+                        if compound_subs:
+                            best_evidence.compound_substitutions = compound_subs
                         best_score = evidence_score
 
                         if debug:
                             print(
-                                f"           ★ NEW BEST PARTIAL EVIDENCE! Score: {best_score:.2f}")
+                                f"           ★ NEW BEST {'COMPOUND' if compound_evidence_type == 'compound' else 'PARTIAL'} EVIDENCE! Score: {best_score:.2f}")
 
             # Also test for deletion anagrams (≤2 excess letters)
             if indicators.get('anagram'):
@@ -1177,16 +1367,29 @@ class ComprehensiveWordplayDetector:
         Now supports partial evidence for multi-stage solving.
         Returns additive score boost.
         """
+        # CRITICAL: If no legitimate fodder letters, score is ZERO
+        # This prevents candidates like PLUMMET scoring when fodder is just "7" (enumeration)
+        if not evidence.fodder_letters or evidence.confidence == 0.0:
+            return 0.0
+        
+        # Also reject if fodder_words only contains enumeration-like entries
+        if evidence.fodder_words:
+            real_fodder = [w for w in evidence.fodder_words 
+                          if not w.strip('()[]').replace(',', '').replace('-', '').isdigit()]
+            if not real_fodder:
+                return 0.0
+        
         base_boost = {
             'exact': 20.0,  # Complete anagram match
             'partial': 8.0,  # Partial contribution (new)
+            'compound': 18.0,  # Complete compound (fodder + substitution)
             'deletion': 15.0,  # Deletion anagram
             'insertion': 12.0  # Insertion anagram
         }
 
         boost = base_boost.get(evidence.evidence_type, 0.0)
 
-        # Adjust based on confidence
+        # Adjust based on evidence confidence (how much of candidate is explained)
         boost *= evidence.confidence
 
         # Check if fodder appears contiguously in candidate
@@ -1199,6 +1402,33 @@ class ComprehensiveWordplayDetector:
 
         # Bonus for using more clue words
         word_count_bonus = len(evidence.fodder_words) * 1.5
+        
+        # Bonus for compound evidence with substitutions
+        if hasattr(evidence, 'compound_substitutions') and evidence.compound_substitutions:
+            # Each substitution found adds credibility
+            boost += len(evidence.compound_substitutions) * 5.0
+        
+        # NEW: Boost based on indicator confidence/frequency
+        indicator_boost = 0.0
+        if evidence.indicator_words:
+            for ind_word in evidence.indicator_words:
+                ind_lower = ind_word.lower()
+                # Confidence-based boost
+                conf = self.indicator_confidence.get(ind_lower, 'low')
+                conf_boost = {
+                    'very_high': 15.0,
+                    'high': 10.0,
+                    'medium': 5.0,
+                    'low': 0.0
+                }.get(conf, 0.0)
+                indicator_boost += conf_boost
+                
+                # Frequency-based bonus (scaled)
+                freq = self.indicator_frequency.get(ind_lower, 0)
+                if freq > 50:
+                    indicator_boost += 5.0  # Common indicator
+                elif freq > 20:
+                    indicator_boost += 2.0  # Moderately common
 
         # Special handling for partial evidence
         if evidence.evidence_type == "partial":
@@ -1208,7 +1438,7 @@ class ComprehensiveWordplayDetector:
                         len(evidence.needed_letters) / len(evidence.candidate))
                 boost += explained_ratio * 5.0  # Up to 5 extra points
 
-        return boost + word_count_bonus
+        return boost + word_count_bonus + indicator_boost
 
     def analyze_and_rank_anagram_candidates(self, clue_text: str, candidates: List[str],
                                             answer: str, debug: bool = False,
@@ -1324,13 +1554,15 @@ class ComprehensiveWordplayDetector:
             if evidence:
                 evidence_score = self.calculate_anagram_score_boost(evidence)
 
-                # Boost exact matches (including deletion/doubling variants) over partial
+                # Boost exact/compound matches (including deletion/doubling variants) over partial
                 if evidence.evidence_type in ('exact', 'exact_with_deletion',
-                                              'exact_with_doubling'):
-                    evidence_score += 50  # Significant boost for exact matches
+                                              'exact_with_doubling', 'compound'):
+                    evidence_score += 50  # Significant boost for complete evidence
 
             # Add definition match quality bonus (if definition_support provided)
-            if definition_support:
+            # ONLY add if there's already legitimate anagram evidence (score > 0)
+            # This prevents definition-only matches from ranking in the anagram track
+            if definition_support and evidence_score > 0:
                 # Find windows that produced this candidate
                 candidate_windows = set()
                 for window, cands in definition_support.items():
