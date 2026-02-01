@@ -294,6 +294,59 @@ class ComprehensiveWordplayDetector:
             # Silently fail - substitution lookup is an enhancement, not critical
             pass
         
+        # Check "half X" patterns (e.g., "half like" -> LI or "like half" -> LI)
+        # This handles parts/deletion indicators that take half of an adjacent word
+        # Must be OUTSIDE the try block since it doesn't use the database
+        half_indicators = {'half', 'halved', 'halves', 'partly', 'partial', 'semi'}
+        
+        for i, word in enumerate(words):
+            word_lower = word.lower().strip('.,;:!?')
+            
+            if word_lower in half_indicators:
+                # Check word AFTER the indicator (e.g., "half like")
+                if i + 1 < len(words):
+                    target = words[i + 1]
+                    target_clean = target.lower().strip('.,;:!?')
+                    target_letters = ''.join(c.lower() for c in target if c.isalpha())
+                    
+                    if len(target_letters) >= 2:
+                        half_len = len(target_letters) // 2
+                        first_half = target_letters[:half_len]
+                        second_half = target_letters[half_len:]
+                        
+                        # Check if either half provides needed letters
+                        for half, desc in [(first_half, 'first'), (second_half, 'second')]:
+                            if not half:
+                                continue
+                            half_counter = Counter(half)
+                            provides_needed = all(needed_counter[c] >= half_counter[c] for c in half_counter)
+                            
+                            if provides_needed:
+                                phrase = f"{word_lower} {target_clean}"
+                                results.append((phrase, half.upper(), f'{desc}_half'))
+                
+                # Check word BEFORE the indicator (e.g., "like half")
+                if i > 0:
+                    target = words[i - 1]
+                    target_clean = target.lower().strip('.,;:!?')
+                    target_letters = ''.join(c.lower() for c in target if c.isalpha())
+                    
+                    if len(target_letters) >= 2:
+                        half_len = len(target_letters) // 2
+                        first_half = target_letters[:half_len]
+                        second_half = target_letters[half_len:]
+                        
+                        # Check if either half provides needed letters
+                        for half, desc in [(first_half, 'first'), (second_half, 'second')]:
+                            if not half:
+                                continue
+                            half_counter = Counter(half)
+                            provides_needed = all(needed_counter[c] >= half_counter[c] for c in half_counter)
+                            
+                            if provides_needed:
+                                phrase = f"{target_clean} {word_lower}"
+                                results.append((phrase, half.upper(), f'{desc}_half'))
+        
         return results
 
     def normalize_letters(self, text: str) -> str:
@@ -997,7 +1050,19 @@ class ComprehensiveWordplayDetector:
                         if t_lower in LINK_WORDS:
                             link_words_found.append(t)
                         else:
-                            remaining_words.append(t)
+                            deletion_enum_bonus = -50
+                    
+                    deletion_score = deletion_enum_bonus + deletion_explained - excess_penalty + (1.0 / len(fodder.words))
+                    
+                    if debug and i < 10:
+                        print(f"           Deletion score: {deletion_score:.2f} (enum={deletion_enum_bonus}, explained={deletion_explained}, excess_penalty={excess_penalty})")
+                    
+                    # Only use deletion evidence if better than current best
+                    if deletion_score > best_score:
+                        # Calculate complete word attribution
+                        indicator_words = list(fodder.indicator.words)
+                        fodder_word_set = set(w.lower() for w in fodder.words)
+                        indicator_word_set = set(w.lower() for w in indicator_words)
 
                     # Return evidence with deletion info
                     evidence = AnagramEvidence(
@@ -1050,145 +1115,88 @@ class ComprehensiveWordplayDetector:
 
                     # Combined score: enumeration dominates, then letters, then coherence
                     evidence_score = enumeration_bonus + primary_score + word_count_factor
-
+                    
                     # Calculate confidence for display (0.0 to 1.0)
                     confidence = explained_letters / total_letters
+
+                    # Calculate complete word attribution BEFORE comparison
+                    # This is needed to compute compound bonus for fair comparison
+                    indicator_words = list(fodder.indicator.words)
+                    fodder_word_set = set(w.lower() for w in fodder.words)
+                    indicator_word_set = set(w.lower() for w in indicator_words)
+
+                    link_words_found = []
+                    remaining_words = []
+                    for t in tokens:
+                        t_lower = t.lower()
+                        if t_lower in fodder_word_set:
+                            continue
+                        if t_lower in indicator_word_set:
+                            continue
+                        if t_lower in LINK_WORDS:
+                            link_words_found.append(t)
+                        else:
+                            remaining_words.append(t)
+
+                    # Check if remaining words can provide needed letters via wordplay
+                    # This detects compound evidence like "THE FRENCH" -> LA
+                    # MOVED BEFORE comparison so all fodders get fair compound scoring
+                    compound_subs = []
+                    compound_evidence_type = "partial"
+                    compound_confidence = confidence
+                    letters_still_needed = remaining_letters
+                    
+                    if remaining_letters and remaining_words:
+                        # Check wordplay table for substitutions
+                        subs = self.lookup_wordplay_substitutions(remaining_words, remaining_letters)
+                        
+                        if subs:
+                            # Try to find substitution(s) that complete the needed letters
+                            temp_needed = remaining_letters.lower()
+                            
+                            for phrase, sub_letters, category in subs:
+                                sub_lower = sub_letters.lower()
+                                
+                                # Check if this substitution's letters are all still needed
+                                temp_check = temp_needed
+                                can_use = True
+                                for c in sub_lower:
+                                    if c in temp_check:
+                                        temp_check = temp_check.replace(c, '', 1)
+                                    else:
+                                        can_use = False
+                                        break
+                                
+                                if can_use:
+                                    compound_subs.append((phrase, sub_letters, category))
+                                    temp_needed = temp_check
+                                    
+                                    if debug:
+                                        print(f"           ★ COMPOUND: '{phrase}' -> {sub_letters} ({category})")
+                            
+                            letters_still_needed = temp_needed
+                            
+                            # If we found substitutions that explain ALL remaining letters
+                            if not letters_still_needed:
+                                compound_evidence_type = "compound"
+                                compound_confidence = 0.95  # High confidence for complete compound
+                                # Massive bonus for complete compound evidence
+                                evidence_score += 75
+                                
+                                if debug:
+                                    print(f"           ★★ COMPLETE COMPOUND EVIDENCE! New score: {evidence_score:.2f}")
+                            elif len(letters_still_needed) < len(remaining_letters):
+                                # Partial compound - some letters explained
+                                evidence_score += 25
+                                compound_confidence = (len(candidate_letters) - len(letters_still_needed)) / len(candidate_letters)
 
                     if debug and i < 10:
                         enum_status = "✅" if enumeration_bonus > 0 else "❌" if enumeration_bonus < 0 else "?"
                         print(
                             f"           → Score: {evidence_score:.2f} ({enum_status} enum={enumeration_bonus}, letters={explained_letters}/{total_letters}, words={len(fodder.words)}, confidence={confidence:.2f})")
 
+                    # NOW compare with full compound-enhanced score
                     if evidence_score > best_score:
-                        # Calculate complete word attribution
-                        indicator_words = list(fodder.indicator.words)
-                        fodder_word_set = set(w.lower() for w in fodder.words)
-                        indicator_word_set = set(w.lower() for w in indicator_words)
-
-                        link_words_found = []
-                        remaining_words = []
-                        for t in tokens:
-                            t_lower = t.lower()
-                            if t_lower in fodder_word_set:
-                                continue
-                            if t_lower in indicator_word_set:
-                                continue
-                            if t_lower in LINK_WORDS:
-                                link_words_found.append(t)
-                            else:
-                                remaining_words.append(t)
-
-                        # NEW: Check if remaining words can provide needed letters via wordplay
-                        # This detects compound evidence like "THE FRENCH" -> LA
-                        compound_subs = []
-                        compound_evidence_type = "partial"
-                        compound_confidence = confidence
-                        letters_still_needed = remaining_letters
-                        
-                        if remaining_letters and remaining_words:
-                            # Check wordplay table for substitutions
-                            subs = self.lookup_wordplay_substitutions(remaining_words, remaining_letters)
-                            
-                            if subs:
-                                # Try to find substitution(s) that complete the needed letters
-                                temp_needed = remaining_letters.lower()
-                                
-                                for phrase, sub_letters, category in subs:
-                                    sub_lower = sub_letters.lower()
-                                    
-                                    # Check if this substitution's letters are all still needed
-                                    temp_check = temp_needed
-                                    can_use = True
-                                    for c in sub_lower:
-                                        if c in temp_check:
-                                            temp_check = temp_check.replace(c, '', 1)
-                                        else:
-                                            can_use = False
-                                            break
-                                    
-                                    if can_use:
-                                        compound_subs.append((phrase, sub_letters, category))
-                                        temp_needed = temp_check
-                                        
-                                        if debug:
-                                            print(f"           ★ COMPOUND: '{phrase}' -> {sub_letters} ({category})")
-                                
-                                letters_still_needed = temp_needed
-                                
-                                # If we found substitutions that explain ALL remaining letters
-                                if not letters_still_needed:
-                                    compound_evidence_type = "compound"
-                                    compound_confidence = 0.95  # High confidence for complete compound
-                                    # Massive bonus for complete compound evidence
-                                    evidence_score += 75
-                                    
-                                    if debug:
-                                        print(f"           ★★ COMPLETE COMPOUND EVIDENCE! New score: {evidence_score:.2f}")
-                                elif len(letters_still_needed) < len(remaining_letters):
-                                    # Partial compound - some letters explained
-                                    evidence_score += 25
-                                    compound_confidence = (len(candidate_letters) - len(letters_still_needed)) / len(candidate_letters)
-
-                        # NEW: Check if remaining words can provide needed letters via wordplay
-                        # This detects compound evidence like "THE FRENCH" -> LA
-                        compound_subs = []
-                        compound_evidence_type = "partial"
-                        compound_confidence = confidence
-                        letters_still_needed = remaining_letters
-                        
-                        if remaining_letters:
-                            # Combine remaining_words and link_words in original clue order
-                            # This is needed because "the french" -> LA requires "the" which may be a link word
-                            all_unused_words = []
-                            used_words = fodder_word_set | indicator_word_set
-                            for t in tokens:
-                                if t.lower() not in used_words:
-                                    all_unused_words.append(t)
-                            
-                            if all_unused_words:
-                                # Check wordplay table for substitutions
-                                subs = self.lookup_wordplay_substitutions(all_unused_words, remaining_letters)
-                                
-                                if subs:
-                                    # Try to find substitution(s) that complete the needed letters
-                                    temp_needed = remaining_letters.lower()
-                                    
-                                    for phrase, sub_letters, category in subs:
-                                        sub_lower = sub_letters.lower()
-                                        
-                                        # Check if this substitution's letters are all still needed
-                                        temp_check = temp_needed
-                                        can_use = True
-                                        for c in sub_lower:
-                                            if c in temp_check:
-                                                temp_check = temp_check.replace(c, '', 1)
-                                            else:
-                                                can_use = False
-                                                break
-                                        
-                                        if can_use:
-                                            compound_subs.append((phrase, sub_letters, category))
-                                            temp_needed = temp_check
-                                            
-                                            if debug:
-                                                print(f"           ★ COMPOUND: '{phrase}' -> {sub_letters} ({category})")
-                                    
-                                    letters_still_needed = temp_needed
-                                    
-                                    # If we found substitutions that explain ALL remaining letters
-                                    if not letters_still_needed:
-                                        compound_evidence_type = "compound"
-                                        compound_confidence = 0.95  # High confidence for complete compound
-                                        # Massive bonus for complete compound evidence
-                                        evidence_score += 75
-                                        
-                                        if debug:
-                                            print(f"           ★★ COMPLETE COMPOUND EVIDENCE! New score: {evidence_score:.2f}")
-                                    elif len(letters_still_needed) < len(remaining_letters):
-                                        # Partial compound - some letters explained
-                                        evidence_score += 25
-                                        compound_confidence = (len(candidate_letters) - len(letters_still_needed)) / len(candidate_letters)
-
                         best_evidence = AnagramEvidence(
                             candidate=candidate,
                             fodder_words=list(fodder.words),
@@ -1220,39 +1228,63 @@ class ComprehensiveWordplayDetector:
                         print(
                             f"           Deletion: can_delete={can_delete}, excess='{excess}'")
 
-                    # Calculate complete word attribution
-                    indicator_words = list(fodder.indicator.words)
-                    fodder_word_set = set(w.lower() for w in fodder.words)
-                    indicator_word_set = set(w.lower() for w in indicator_words)
-
-                    link_words_found = []
-                    remaining_words = []
-                    for t in tokens:
-                        t_lower = t.lower()
-                        if t_lower in fodder_word_set:
-                            continue
-                        if t_lower in indicator_word_set:
-                            continue
-                        if t_lower in LINK_WORDS:
-                            link_words_found.append(t)
+                    # Calculate score for deletion evidence
+                    # All letters are explained but we have excess, so penalize
+                    deletion_explained = len(candidate_letters)
+                    excess_penalty = len(excess) * 10  # Penalty per excess letter
+                    
+                    # Check enumeration match
+                    deletion_enum_bonus = 0
+                    if enumeration:
+                        if self._matches_enumeration_pattern(candidate, enumeration):
+                            deletion_enum_bonus = 100
                         else:
-                            remaining_words.append(t)
+                            deletion_enum_bonus = -50
+                    
+                    deletion_score = deletion_enum_bonus + deletion_explained - excess_penalty + (1.0 / len(fodder.words))
+                    
+                    if debug and i < 10:
+                        print(f"           Deletion score: {deletion_score:.2f} (enum={deletion_enum_bonus}, explained={deletion_explained}, excess_penalty={excess_penalty})")
+                    
+                    # Only use deletion evidence if better than current best
+                    if deletion_score > best_score:
+                        # Calculate complete word attribution
+                        indicator_words = list(fodder.indicator.words)
+                        fodder_word_set = set(w.lower() for w in fodder.words)
+                        indicator_word_set = set(w.lower() for w in indicator_words)
 
-                    deletion_confidence = 0.8
+                        link_words_found = []
+                        remaining_words = []
+                        for t in tokens:
+                            t_lower = t.lower()
+                            if t_lower in fodder_word_set:
+                                continue
+                            if t_lower in indicator_word_set:
+                                continue
+                            if t_lower in LINK_WORDS:
+                                link_words_found.append(t)
+                            else:
+                                remaining_words.append(t)
 
-                    return AnagramEvidence(
-                        candidate=candidate,
-                        fodder_words=list(fodder.words),
-                        fodder_letters=fodder_letters,
-                        evidence_type="deletion",
-                        confidence=deletion_confidence,
-                        excess_letters=excess,
-                        indicator_words=indicator_words,
-                        indicator_position=fodder.indicator.start_pos,
-                        link_words=link_words_found,
-                        remaining_words=remaining_words,
-                        unused_clue_words=remaining_words  # Backward compatibility
-                    )
+                        deletion_confidence = 0.8
+
+                        best_evidence = AnagramEvidence(
+                            candidate=candidate,
+                            fodder_words=list(fodder.words),
+                            fodder_letters=fodder_letters,
+                            evidence_type="deletion",
+                            confidence=deletion_confidence,
+                            excess_letters=excess,
+                            indicator_words=indicator_words,
+                            indicator_position=fodder.indicator.start_pos,
+                            link_words=link_words_found,
+                            remaining_words=remaining_words,
+                            unused_clue_words=remaining_words  # Backward compatibility
+                        )
+                        best_score = deletion_score
+                        
+                        if debug:
+                            print(f"           ★ NEW BEST DELETION EVIDENCE! Score: {best_score:.2f}")
 
         return best_evidence
 

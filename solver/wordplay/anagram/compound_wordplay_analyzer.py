@@ -982,8 +982,8 @@ class CompoundWordplayAnalyzer:
             two_word = f"{norm_letters(word1)} {norm_letters(word2)}"
             indicator_match = self.db.lookup_indicator(two_word)
             if indicator_match and indicator_match.wordplay_type == 'anagram':
-                # Two-word indicators get a slight boost for being more specific
-                freq = indicator_match.frequency + 10
+                # Use raw frequency - no boost for two-word indicators
+                freq = indicator_match.frequency
                 indicator_candidates.append((f"{word1} {word2}", freq, indicator_match))
 
         # Second pass: look for SINGLE-WORD indicators in database
@@ -1834,6 +1834,37 @@ class CompoundWordplayAnalyzer:
                     # Update needed letters
                     for c in sub_letters:
                         needed_letters = needed_letters.replace(c, '', 1)
+                    
+                    # NEW: Check for adjacent positional/insertion indicator
+                    # This claims words like "in" as positional indicators for the substitution
+                    # preventing them from being incorrectly used as anagram fodder
+                    try:
+                        sub_word_idx = remaining_words.index(word)
+                        adjacent_indices = []
+                        if sub_word_idx > 0:
+                            adjacent_indices.append(sub_word_idx - 1)
+                        if sub_word_idx < len(remaining_words) - 1:
+                            adjacent_indices.append(sub_word_idx + 1)
+                        
+                        for adj_idx in adjacent_indices:
+                            adj_word = remaining_words[adj_idx]
+                            adj_lower = adj_word.lower()
+                            
+                            if adj_lower in accounted_words:
+                                continue
+                            
+                            adj_indicator = self.db.lookup_indicator(adj_word)
+                            if adj_indicator and adj_indicator.wordplay_type in ('insertion', 'container'):
+                                positional_indicators.append(adj_word)
+                                word_roles.append(WordRole(
+                                    adj_word, 'positional_indicator', '',
+                                    f'insertion indicator for {word}→{sub_letters}'
+                                ))
+                                accounted_words.add(adj_lower)
+                                break
+                    except ValueError:
+                        pass
+                    
                     break  # Stop at first valid substitution for this word
 
         # Check for TWO-WORD phrase substitutions (e.g., "the french" -> LA)

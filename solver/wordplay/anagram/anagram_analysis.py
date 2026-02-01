@@ -240,7 +240,11 @@ def display_compound_results(compound_results, max_display=10):
                 constr = compound_sol['construction']
                 print(f"      Construction: {constr.get('operation', 'unknown')}")
 
-            print(f"      Fully resolved: {compound_sol.get('fully_resolved', False)}")
+            # Only show as resolved if answer is correct
+            fully_resolved = compound_sol.get('fully_resolved', False)
+            if result.get('explanation', {}).get('quality') == 'INCORRECT':
+                fully_resolved = False
+            print(f"      Fully resolved: {fully_resolved}")
 
         # Show unaccounted indicator/fodder for self-learning
         if compound_sol:
@@ -269,10 +273,11 @@ def display_compound_results(compound_results, max_display=10):
         if q in quality_counts:
             print(f"  {q}: {quality_counts[q]}")
 
-    # Count fully resolved
+    # Count fully resolved (only correct answers count)
     fully_resolved = sum(1 for r in compound_results
                          if
-                         (r.get('compound_solution') or {}).get('fully_resolved', False))
+                         (r.get('compound_solution') or {}).get('fully_resolved', False)
+                         and r.get('explanation', {}).get('quality') != 'INCORRECT')
     print(f"\n  Fully resolved: {fully_resolved}/{len(compound_results)}")
 
     # Count answer matches

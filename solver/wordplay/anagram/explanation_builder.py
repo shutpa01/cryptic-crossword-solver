@@ -397,13 +397,56 @@ class ExplanationBuilder:
         return {
             'formula': formula,
             'breakdown': explanations,
-            'quality': self.assess_quality(compound_solution, word_roles, clue_words)
+            'quality': self.assess_quality(compound_solution, word_roles, clue_words,
+                                           likely_answer, case.get('answer', ''),
+                                           fodder_letters)
         }
 
     def assess_quality(self, compound_solution: Optional[Dict[str, Any]],
                        word_roles: List[WordRole],
-                       clue_words: List[str]) -> str:
-        """Assess explanation quality based on word coverage."""
+                       clue_words: List[str],
+                       likely_answer: str = '',
+                       db_answer: str = '',
+                       fodder_letters: str = '') -> str:
+        """
+        Assess explanation quality based on word coverage AND answer correctness.
+        
+        CRITICAL: An explanation is only 'solved' if:
+        1. The likely_answer matches the db_answer
+        2. The letter math works (fodder + substitutions = answer length)
+        3. Word coverage is high
+        """
+        # CRITICAL CHECK 1: Answer must match
+        answer_matches = False
+        if likely_answer and db_answer:
+            # Normalize for comparison (strip spaces, uppercase)
+            likely_norm = likely_answer.upper().replace(' ', '')
+            db_norm = db_answer.upper().replace(' ', '')
+            answer_matches = (likely_norm == db_norm)
+        
+        # CRITICAL CHECK 2: Letter math must work
+        letter_math_valid = False
+        if fodder_letters and likely_answer:
+            answer_letters = len(likely_answer.replace(' ', ''))
+            fodder_len = len(fodder_letters)
+            
+            # Get substitution letters if any
+            sub_letters = 0
+            if compound_solution and compound_solution.get('substitutions'):
+                for _, letters, _ in compound_solution['substitutions']:
+                    sub_letters += len(letters)
+            
+            # For exact anagram: fodder = answer
+            # For compound: fodder + substitutions = answer
+            # For deletion: fodder - excess = answer
+            if compound_solution and compound_solution.get('operation') == 'deletion':
+                excess = compound_solution.get('excess_letters', '')
+                letter_math_valid = (fodder_len - len(excess) == answer_letters)
+            else:
+                # Exact or compound
+                letter_math_valid = (fodder_len + sub_letters == answer_letters)
+        
+        # Calculate word coverage (existing logic)
         accounted = {norm_letters(wr.word) for wr in word_roles}
         total_words = len(
             [w for w in clue_words if norm_letters(w) not in self.link_words])
@@ -419,6 +462,19 @@ class ExplanationBuilder:
         has_fodder = any(wr.role == 'fodder' for wr in word_roles)
         has_indicator = any('indicator' in wr.role for wr in word_roles)
 
+        # CRITICAL: Wrong answer = INCORRECT
+        if not answer_matches:
+            return 'INCORRECT'
+        
+        # Answer matches - now check letter math
+        if not letter_math_valid and fodder_letters:
+            # Letter counts don't add up - suspicious, cap at 'medium'
+            if coverage >= 0.7:
+                return 'medium'
+            else:
+                return 'low'
+
+        # Both checks passed - use coverage-based quality
         # Compound with substitutions
         if compound_solution and compound_solution.get('fully_resolved'):
             if coverage >= 0.9:

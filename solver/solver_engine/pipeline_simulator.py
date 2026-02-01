@@ -49,11 +49,11 @@ except ImportError:
 # SIMULATOR CONFIGURATION
 # ==============================
 
-MAX_CLUES = 5000
+MAX_CLUES = 20
 WORDPLAY_TYPE = "anagram"  # e.g. "all", "anagram", "lurker", "dd"
 ONLY_MISSING_DEFINITION = False  # show only clues where answer NOT in def candidates
 MAX_DISPLAY = 10  # max number of clues to print
-SINGLE_CLUE_MATCH = "Europeans only half like a saint surprisingly"  # normalised substring match on clue_text (highest priority)
+SINGLE_CLUE_MATCH = ""  # normalised substring match on clue_text (highest priority)
 
 # NEW: Forwarded cohort analysis settings
 ANALYZE_FORWARDED_ANAGRAMS = False  # Disable for explanation system development - focus on successes
@@ -453,12 +453,23 @@ def run_pipeline_probe(
         definition_answer_present = (
                 answer in {norm_letters(c) for c in flat_candidates}
         )
+        
+        # Build candidate → windows mapping (inverse of window_support)
+        candidate_to_windows = {}
+        for window, cands in windows_with_hits.items():
+            for cand in cands:
+                if cand not in candidate_to_windows:
+                    candidate_to_windows[cand] = []
+                if window not in candidate_to_windows[cand]:
+                    candidate_to_windows[cand].append(window)
+        
         definition_stage_records.append({
             'id': clue_id,
             'clue_text': clue,
             'answer': answer_raw,
             'definition_candidates': flat_candidates,
-            'answer_in_candidates': definition_answer_present
+            'answer_in_candidates': definition_answer_present,
+            'support': candidate_to_windows
         })
 
         # ---- DEFINITION GATE: Skip if answer not in candidates ----
