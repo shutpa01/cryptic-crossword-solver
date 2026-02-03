@@ -11,13 +11,16 @@ Algorithm:
 2. Generate definition windows from each half independently
 3. Look up candidates for each half
 4. If both halves produce the SAME candidate → true DD
+5. Coverage check: the two windows must account for nearly all
+   clue words (at most 1 uncovered link word like "and", "or")
+6. Answer verification: if actual answer provided, candidate must match it
 
 Example:
   "Run fast (6)" → SPRINT
   Split at word 1: LEFT="Run" | RIGHT="fast"
   LEFT candidates: [SPRINT, JOG, ...]
   RIGHT candidates: [SPRINT, QUICK, ...]
-  Overlap: SPRINT → TRUE DD
+  Overlap: SPRINT → TRUE DD (coverage: 2/2 words = 100%)
 """
 
 import re
@@ -70,6 +73,7 @@ def generate_dd_hypotheses(
         clue_text: str,
         graph,
         total_len=None,
+        answer=None,
 ):
     """
     True Double Definition detection.
@@ -78,6 +82,10 @@ def generate_dd_hypotheses(
     1. The clue can be split into LEFT and RIGHT parts
     2. LEFT part independently produces candidate X
     3. RIGHT part independently produces the SAME candidate X
+    4. The two definition windows together cover nearly all clue words
+       (at most 1 uncovered word, allowing for a link word)
+    5. If answer is provided, candidate X must match the actual answer
+       (prevents false positives like finding INSTANT when answer is REPULSE)
 
     Returns at most ONE hit (existential check).
     """
@@ -102,20 +110,40 @@ def generate_dd_hypotheses(
         # Find overlap - candidates that appear in BOTH halves
         overlap = set(left_candidates.keys()) & set(right_candidates.keys())
 
+        # Answer verification: only accept candidates matching the actual answer
+        if answer and overlap:
+            answer_norm = norm_letters(answer)
+            overlap = {c for c in overlap if c == answer_norm}
+
         if overlap:
-            # Take first overlapping candidate
-            cand_norm = next(iter(overlap))
+            left_word_count = split_point
+            right_word_count = len(words) - split_point
 
-            # Get the actual answer form and windows from each side
-            left_window, left_answer = left_candidates[cand_norm][0]
-            right_window, right_answer = right_candidates[cand_norm][0]
+            for cand_norm in overlap:
+                # Pick the longest (most covering) window from each side
+                best_left = max(left_candidates[cand_norm],
+                                key=lambda x: len(x[0].split()))
+                best_right = max(right_candidates[cand_norm],
+                                 key=lambda x: len(x[0].split()))
 
-            return [{
-                "answer": left_answer,  # Use actual form from graph
-                "windows": [left_window, right_window],
-                "left_definition": left_phrase,
-                "right_definition": right_phrase,
-                "split_point": split_point,
-            }]
+                left_window, left_answer = best_left
+                right_window, right_answer = best_right
+
+                # Coverage check: the two definition windows must account
+                # for nearly all clue words (at most 1 uncovered link word)
+                left_covered = len(left_window.split())
+                right_covered = len(right_window.split())
+                uncovered = (left_word_count - left_covered) + (right_word_count - right_covered)
+
+                if uncovered > 1:
+                    continue  # Too many unaccounted words — not a valid DD
+
+                return [{
+                    "answer": left_answer,  # Use actual form from graph
+                    "windows": [left_window, right_window],
+                    "left_definition": left_phrase,
+                    "right_definition": right_phrase,
+                    "split_point": split_point,
+                }]
 
     return []

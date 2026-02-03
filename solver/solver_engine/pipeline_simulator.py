@@ -392,6 +392,7 @@ def run_pipeline_probe(
         dd_hits = generate_dd_hypotheses(
             clue_text=clue,
             graph=graph,
+            answer=answer_raw,
         )
 
         # Replicate master_solver behaviour: enforce enumeration on DD hits

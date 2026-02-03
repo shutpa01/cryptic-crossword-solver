@@ -34,7 +34,7 @@ CRYPTIC_DB_PATH = Path(r'C:\Users\shute\PycharmProjects\cryptic_solver\data\cryp
 
 # Output path
 REPORT_PATH = Path(r'C:\Users\shute\PycharmProjects\cryptic_solver\solver'
-                   r'\\wordplay\general\puzzle_report.txt')
+                   r'\wordplay\general\puzzle_report.txt')
 
 
 def get_pipeline_connection():
@@ -100,14 +100,17 @@ def clear_stage_general(run_id: int):
 
 def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
     """
-    Load clues from stage_anagram where hit_found = 0.
-    These are clues with NO anagram evidence - candidates for general wordplay.
+    Load clues for general wordplay analysis from TWO sources:
+    1. stage_anagram WHERE hit_found = 0 (no anagram evidence at all)
+    2. stage_compound WHERE fully_resolved = 0 (anagram evidence didn't help)
+    
     Also joins with stage_definition to get definition support data.
     """
     conn = get_pipeline_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
+    # Source 1: No anagram evidence
     cursor.execute("""
         SELECT 
             a.clue_id,
@@ -122,16 +125,40 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
         WHERE a.run_id = ? AND a.hit_found = 0
         ORDER BY a.clue_id
     """, (run_id,))
+    anagram_rows = cursor.fetchall()
 
-    rows = cursor.fetchall()
+    # Source 2: Compound rejects and weak partial anagrams
+    cursor.execute("""
+        SELECT 
+            c.clue_id,
+            c.clue_text,
+            c.answer,
+            d.candidates,
+            d.support
+        FROM stage_compound c
+        LEFT JOIN stage_definition d 
+            ON c.clue_id = d.clue_id AND c.run_id = d.run_id
+        WHERE c.run_id = ? AND c.fully_resolved IN (0, 2)
+        ORDER BY c.clue_id
+    """, (run_id,))
+    compound_rows = cursor.fetchall()
+
     conn.close()
 
+    seen_ids = set()
     results = []
-    for row in rows:
+
+    def _parse_row(row, source_label):
+        clue_id = row['clue_id']
+        if clue_id in seen_ids:
+            return None
+        seen_ids.add(clue_id)
+
         record = {
-            'id': row['clue_id'],
+            'id': clue_id,
             'clue': row['clue_text'],
             'answer': row['answer'] or '',
+            'source_stage': source_label,
         }
 
         # Parse answer (may be stored as "likely_answer|db_answer")
@@ -140,8 +167,8 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
 
         # Parse JSON fields safely
         try:
-            record['unused_words'] = json.loads(row['unused_words'] or '[]')
-        except json.JSONDecodeError:
+            record['unused_words'] = json.loads(row['unused_words'] or '[]') if 'unused_words' in row.keys() else []
+        except (json.JSONDecodeError, KeyError):
             record['unused_words'] = []
 
         try:
@@ -161,7 +188,24 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
         else:
             record['enumeration'] = ''
 
-        results.append(record)
+        return record
+
+    # Process anagram misses first
+    for row in anagram_rows:
+        rec = _parse_row(row, 'anagram_miss')
+        if rec:
+            results.append(rec)
+
+    anagram_miss_count = len(results)
+
+    # Then compound rejects
+    for row in compound_rows:
+        rec = _parse_row(row, 'compound_reject')
+        if rec:
+            results.append(rec)
+
+    compound_reject_count = len(results) - anagram_miss_count
+    print(f"  Sources: {anagram_miss_count} anagram misses + {compound_reject_count} compound rejects")
 
     return results
 
@@ -411,12 +455,12 @@ def write_puzzle_report(run_id: int = 0):
     """, (run_id,))
     lurker_hits = cursor.fetchall()
 
-    # ---- Compound (anagram-based) ----
+    # ---- Compound (anagram-based, only fully solved - rejects forwarded to general) ----
     cursor.execute("""
         SELECT clue_id, clue_text, answer, formula, quality, definition_window,
                fully_resolved, letters_still_needed, breakdown, substitutions,
                operation_indicators, unresolved_words
-        FROM stage_compound WHERE run_id = ?
+        FROM stage_compound WHERE run_id = ? AND fully_resolved = 1
         ORDER BY clue_id
     """, (run_id,))
     compound_rows = cursor.fetchall()
@@ -571,9 +615,9 @@ def run_general_analysis(run_id: int = 0):
     init_general_table()
     clear_stage_general(run_id)
 
-    print(f"\nLoading non-anagram clues from stage_anagram (run_id={run_id})...")
+    print(f"\nLoading clues for general analysis (anagram misses + compound rejects, run_id={run_id})...")
     non_anagram_clues = load_non_anagram_clues(run_id)
-    print(f"  Found {len(non_anagram_clues)} clues with no anagram evidence")
+    print(f"  Total: {len(non_anagram_clues)} clues for general wordplay")
 
     if not non_anagram_clues:
         print("  No non-anagram clues to analyze.")
