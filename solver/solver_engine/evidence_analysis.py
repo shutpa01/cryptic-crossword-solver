@@ -21,7 +21,7 @@ sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
 # Import the original pipeline simulator (maintaining sanctity)
 from solver.solver_engine.pipeline_simulator import run_pipeline_probe, MAX_CLUES, \
     WORDPLAY_TYPE
-from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
+from solver.wordplay.anagram.anagram_evidence_system_patched import ComprehensiveWordplayDetector
 
 # Evidence scoring configuration
 ENABLE_EVIDENCE_SCORING = True
@@ -60,7 +60,7 @@ class EvidenceAnalyzer:
     def apply_evidence_scoring(self, record, debug=False):
         """
         THIN WRAPPER: Calls permanent engine only.
-        No embedded logic - everything happens in anagram_evidence_system.py.
+        No embedded logic - everything happens in anagram_evidence_system_patched.py.
         """
         if not self.detector:
             return record

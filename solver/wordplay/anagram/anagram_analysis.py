@@ -153,6 +153,7 @@ class CompoundAnalyzer:
                 exp['likely_answer'] = enhanced_cases[i].get('likely_answer', '')
                 exp['db_answer'] = enhanced_cases[i].get('db_answer', '')
                 exp['answer_matches'] = enhanced_cases[i].get('answer_matches', False)
+                exp['anagram_component'] = enhanced_cases[i].get('anagram_component', {})
 
                 compound_explanations.append(exp)
 

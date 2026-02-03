@@ -10,7 +10,7 @@ _evidence_detector = None
 ComprehensiveWordplayDetector = None
 
 try:
-    from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
+    from solver.wordplay.anagram.anagram_evidence_system_patched import ComprehensiveWordplayDetector
     EVIDENCE_SYSTEM_AVAILABLE = True
 except ImportError as e:
     print(f"EVIDENCE IMPORT FAILED: {e}")

@@ -29,7 +29,7 @@ from solver.wordplay.lurker.lurker_stage import generate_lurker_hypotheses
 
 # Evidence System Integration for Analysis
 try:
-    from solver.wordplay.anagram.anagram_evidence_system import \
+    from solver.wordplay.anagram.anagram_evidence_system_patched import \
         ComprehensiveWordplayDetector
 
     EVIDENCE_SYSTEM_AVAILABLE = True
@@ -49,18 +49,24 @@ except ImportError:
 # SIMULATOR CONFIGURATION
 # ==============================
 
-MAX_CLUES = 20
-WORDPLAY_TYPE = "anagram"  # e.g. "all", "anagram", "lurker", "dd"
+MAX_CLUES = 100
+WORDPLAY_TYPE = "all"  # e.g. "all", "anagram", "lurker", "dd"
 ONLY_MISSING_DEFINITION = False  # show only clues where answer NOT in def candidates
-MAX_DISPLAY = 10  # max number of clues to print
+MAX_DISPLAY = 50  # max number of clues to print
 SINGLE_CLUE_MATCH = ""  # normalised substring match on clue_text (highest priority)
+SOURCE = "telegraph"  # e.g. "telegraph", "times", "guardian", "ft", "independent" (
+# empty = all)
+PUZZLE_NUMBER = "31093"  # e.g. "29345" (empty = all)
+
+# NEW: Use known answer as single candidate (skip definition candidate generation)
+USE_KNOWN_ANSWER = True  # When True, answer becomes the only candidate
 
 # NEW: Forwarded cohort analysis settings
 ANALYZE_FORWARDED_ANAGRAMS = False  # Disable for explanation system development - focus on successes
-MAX_FORWARDED_SAMPLES = 25  # Max forwarded samples to show
+MAX_FORWARDED_SAMPLES = 50  # Max forwarded samples to show
 
 # NEW: Successful anagram analysis for explanation system development
-ANALYZE_SUCCESSFUL_ANAGRAMS = True  # Enable successful anagram analysis
+ANALYZE_SUCCESSFUL_ANAGRAMS = False  # Enable successful anagram analysis
 MAX_SUCCESSFUL_SAMPLES = 25  # Max successful samples to show
 
 # NEW: Persistence settings
@@ -288,27 +294,33 @@ def run_pipeline_probe(
             r for r in cur.fetchall()
             if _match_single_clue(SINGLE_CLUE_MATCH, r[1])
         ]
-    elif wp_filter == "all":
-        cur.execute(
-            """
-            SELECT id, clue_text, enumeration, answer, wordplay_type, source, puzzle_number
-            FROM clues
-            ORDER BY RANDOM()
-            LIMIT ?
-            """,
-            (max_clues,),
-        )
-        rows = cur.fetchall()
     else:
+        # Build dynamic WHERE clause from filters
+        conditions = []
+        params = []
+
+        if wp_filter != "all":
+            conditions.append("LOWER(wordplay_type) = ?")
+            params.append(wp_filter)
+        if SOURCE:
+            conditions.append("LOWER(source) = ?")
+            params.append(SOURCE.lower())
+        if PUZZLE_NUMBER:
+            conditions.append("puzzle_number = ?")
+            params.append(PUZZLE_NUMBER)
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        params.append(max_clues)
+
         cur.execute(
-            """
+            f"""
             SELECT id, clue_text, enumeration, answer, wordplay_type, source, puzzle_number
             FROM clues
-            WHERE LOWER(wordplay_type) = ?
+            {where_clause}
             ORDER BY RANDOM()
             LIMIT ?
             """,
-            (wp_filter, max_clues),
+            params,
         )
         rows = cur.fetchall()
 
@@ -420,13 +432,26 @@ def run_pipeline_probe(
 
         raw_candidates = def_result.get("candidates", []) or []
         flat_candidates = _length_filter(raw_candidates, enum)
-
+        
+        # NEW: Use known answer as single candidate if enabled
+        # NEW: Use known answer as single candidate if enabled
+        if USE_KNOWN_ANSWER:
+            flat_candidates = [answer_raw]
+            definition_answer_present = True
+            # Skip the normal candidate filtering - we know the answer
+            windows_with_hits = {w: [answer_raw] for w in
+                                 raw_windows[:1]} if raw_windows else {"?": [answer_raw]}
+            candidate_to_windows = {answer_raw: raw_windows[:1] if raw_windows else ["?"]}
         # ---- WINDOW → CANDIDATES (INVERTED SUPPORT) ----
         window_support: Dict[str, List[str]] = defaultdict(list)
         # All windows, including those with zero candidates
         window_candidates_by_window: Dict[str, List[str]] = {w: [] for w in raw_windows}
 
         for window in raw_windows:
+            # Skip window processing if using known answer
+            if USE_KNOWN_ANSWER:
+                break
+                
             window_key = clean_key(window)
 
             keys = [window_key]
@@ -450,9 +475,11 @@ def run_pipeline_probe(
         windows_with_hits = {w: c for w, c in window_support.items() if c}
 
         # ---- Save Definition Stage Record ----
-        definition_answer_present = (
-                answer in {norm_letters(c) for c in flat_candidates}
-        )
+        if not USE_KNOWN_ANSWER:
+            definition_answer_present = (
+                    answer in {norm_letters(c) for c in flat_candidates}
+            )
+        # else: already set to True above
         
         # Build candidate → windows mapping (inverse of window_support)
         candidate_to_windows = {}
@@ -474,7 +501,8 @@ def run_pipeline_probe(
 
         # ---- DEFINITION GATE: Skip if answer not in candidates ----
         # Cannot solve if correct answer isn't even a candidate
-        if not definition_answer_present:
+        # Skip gate when using known answer (always present)
+        if not definition_answer_present and not USE_KNOWN_ANSWER:
             # Save to definition_failed for debugging
             definition_failed_records.append({
                 'id': clue_id,

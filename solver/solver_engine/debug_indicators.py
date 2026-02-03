@@ -10,7 +10,7 @@ import os
 # Add the project root to Python path
 sys.path.append(r'C:\Users\shute\PycharmProjects\cryptic_solver')
 
-from solver.wordplay.anagram.anagram_evidence_system import ComprehensiveWordplayDetector
+from solver.wordplay.anagram.anagram_evidence_system_patched import ComprehensiveWordplayDetector
 
 # Test the problematic clue
 detector = ComprehensiveWordplayDetector()

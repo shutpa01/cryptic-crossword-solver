@@ -367,6 +367,10 @@ class ComprehensiveWordplayDetector:
         target_counter = Counter(self.normalize_letters(target))
         source_counter = Counter(self.normalize_letters(source))
 
+        # Source must have alphabetic content to contribute
+        if not source_counter:
+            return False, 0.0, ""
+
         # Check each letter in source exists in target
         for letter, count in source_counter.items():
             if target_counter[letter] < count:
@@ -1285,6 +1289,63 @@ class ComprehensiveWordplayDetector:
                         
                         if debug:
                             print(f"           ★ NEW BEST DELETION EVIDENCE! Score: {best_score:.2f}")
+
+        # SURGICAL FIX: If we found indicator + fodder but no best_evidence yet,
+        # preserve the partial evidence anyway (for compound analysis downstream)
+        if best_evidence is None and fodder_sequences and indicators.get('anagram'):
+            # Find the fodder with most letter contribution to candidate
+            best_partial_fodder = None
+            best_contribution = 0
+            
+            for fodder in fodder_sequences:
+                can_contribute, ratio, remaining = self.can_contribute_letters(
+                    candidate_letters, fodder.letters)
+                if can_contribute:
+                    contribution = len(candidate_letters) - len(remaining)
+                    if contribution > best_contribution:
+                        best_contribution = contribution
+                        best_partial_fodder = fodder
+            
+            if best_partial_fodder:
+                # Calculate remaining letters needed
+                _, _, remaining_letters = self.can_contribute_letters(
+                    candidate_letters, best_partial_fodder.letters)
+                
+                # Build word attribution
+                indicator_words = list(best_partial_fodder.indicator.words)
+                fodder_word_set = set(w.lower() for w in best_partial_fodder.words)
+                indicator_word_set = set(w.lower() for w in indicator_words)
+                
+                tokens = self._tokenize_clue(clue_text)
+                link_words_found = []
+                remaining_words = []
+                for t in tokens:
+                    t_lower = t.lower()
+                    if t_lower in fodder_word_set or t_lower in indicator_word_set:
+                        continue
+                    if t_lower in LINK_WORDS:
+                        link_words_found.append(t)
+                    else:
+                        remaining_words.append(t)
+                
+                confidence = best_contribution / len(candidate_letters) if candidate_letters else 0
+                
+                best_evidence = AnagramEvidence(
+                    candidate=candidate,
+                    fodder_words=list(best_partial_fodder.words),
+                    fodder_letters=best_partial_fodder.letters,
+                    evidence_type="partial",
+                    confidence=confidence,
+                    needed_letters=remaining_letters,
+                    indicator_words=indicator_words,
+                    indicator_position=best_partial_fodder.indicator.start_pos,
+                    link_words=link_words_found,
+                    remaining_words=remaining_words,
+                    unused_clue_words=remaining_words
+                )
+                
+                if debug:
+                    print(f"           ★ PRESERVED PARTIAL EVIDENCE: {best_partial_fodder.words} -> {best_partial_fodder.letters}")
 
         return best_evidence
 

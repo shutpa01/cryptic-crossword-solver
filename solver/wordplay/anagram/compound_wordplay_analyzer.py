@@ -129,7 +129,7 @@ class DatabaseLookup:
 
     def lookup_indicator(self, word: str) -> Optional[IndicatorMatch]:
         """Look up a word in the indicators table.
-        
+
         Returns the match with highest frequency if multiple matches exist.
         """
         # Strip punctuation but preserve spaces for two-word indicators
@@ -229,35 +229,35 @@ class DatabaseLookup:
 
     def lookup_phrase_substitution(self, phrase: str) -> List[SubstitutionMatch]:
         """Look up a multi-word phrase in the wordplay table for substitutions.
-        
+
         Handles phrases like "the french" -> LA, "the german" -> DER, etc.
-        
+
         Args:
             phrase: A multi-word phrase (e.g., "the french")
-            
+
         Returns:
             List of SubstitutionMatch objects for any matches found
         """
         phrase_clean = phrase.lower().strip()
-        
+
         if not phrase_clean:
             return []
-        
+
         # Check cache first
         if phrase_clean in self._substitution_cache:
             return self._substitution_cache[phrase_clean]
-        
+
         conn = self._get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT indicator, substitution, category, notes
             FROM wordplay
             WHERE LOWER(indicator) = ?
         """, (phrase_clean,))
-        
+
         results = cursor.fetchall()
-        
+
         matches = [
             SubstitutionMatch(
                 word=r[0],
@@ -267,7 +267,7 @@ class DatabaseLookup:
             )
             for r in results
         ]
-        
+
         self._substitution_cache[phrase_clean] = matches
         return matches
 
@@ -303,7 +303,8 @@ class CompoundSolver:
         Find a substitution that provides exactly the needed letters.
         Returns the first valid match.
         """
-        matches = self.db.lookup_substitution(word, max_synonym_length=len(needed_letters))
+        matches = self.db.lookup_substitution(word,
+                                              max_synonym_length=len(needed_letters))
 
         for match in matches:
             if match.letters.upper() == needed_letters.upper():
@@ -492,6 +493,7 @@ class CompoundWordplayAnalyzer:
         IMPORTANT: We use the MATCHED CANDIDATE from brute force as our "likely answer",
         NOT the database answer. The database answer is only for comparison/verification.
         """
+
         clue_text = case.get('clue', '')
         clue_words = clue_text.replace('(', ' ').replace(')', ' ').split()
 
@@ -520,7 +522,7 @@ class CompoundWordplayAnalyzer:
 
             # Get definition from pipeline data
             definition_window = self._get_definition_window(case, clue_words)
-            
+
             # CHECK: Is the definition_window actually an anagram indicator?
             # This fixes cases like "Yes, a film about short-lived creatures" where
             # "about" is the indicator but was matched as definition
@@ -533,7 +535,7 @@ class CompoundWordplayAnalyzer:
                         # This "definition" is actually the indicator!
                         # Find real definition from remaining words at clue edges
                         fodder_lower = {w.lower() for w in fodder_words}
-                        
+
                         # Find contiguous words at start or end that aren't fodder or this indicator
                         # Prefer end of clue (more common for definitions)
                         end_def_words = []
@@ -542,7 +544,7 @@ class CompoundWordplayAnalyzer:
                             if w_clean in fodder_lower or w_clean == def_words[0].lower():
                                 break
                             end_def_words.insert(0, w)
-                        
+
                         if end_def_words:
                             # Use end words as definition, original "definition" as indicator
                             definition_window = ' '.join(end_def_words)
@@ -593,7 +595,8 @@ class CompoundWordplayAnalyzer:
             # Find remaining words for compound analysis
             # Use norm_letters to handle punctuation (e.g., "Yes," vs "yes")
             accounted_normalized = {norm_letters(a) for a in accounted_words}
-            remaining_words = [w for w in clue_words if norm_letters(w) not in accounted_normalized]
+            remaining_words = [w for w in clue_words if
+                               norm_letters(w) not in accounted_normalized]
 
             # Do compound analysis if there are remaining words (especially insertion material)
             compound_solution = None
@@ -602,7 +605,7 @@ class CompoundWordplayAnalyzer:
                     remaining_words, fodder_letters, likely_answer, word_roles,
                     accounted_words, clue_words, definition_window
                 )
-            
+
             # Check if indicator reassignment is needed (orphaned substitution case)
             if compound_solution and anagram_indicator:
                 unresolved = compound_solution.get('unresolved_words', [])
@@ -610,33 +613,34 @@ class CompoundWordplayAnalyzer:
                     anagram_indicator, compound_solution, unresolved,
                     fodder_words, definition_window
                 )
-                
+
                 if reassignment:
                     new_anagram_indicator, operation_type = reassignment
-                    
+
                     # Update word_roles: change old anagram indicator to operation indicator
                     for wr in word_roles:
                         if wr.word.lower() == anagram_indicator.lower() and wr.role == 'anagram_indicator':
                             wr.role = 'operation_indicator'
                             wr.source = f'database ({operation_type})'
                             break
-                    
+
                     # Add new anagram indicator to word_roles
                     word_roles.append(WordRole(
-                        new_anagram_indicator, 'anagram_indicator', '', 'database (reassigned)'
+                        new_anagram_indicator, 'anagram_indicator', '',
+                        'database (reassigned)'
                     ))
                     accounted_words.add(new_anagram_indicator.lower())
-                    
+
                     # Update anagram_indicator for explanation
                     old_indicator = anagram_indicator
                     anagram_indicator = new_anagram_indicator
-                    
+
                     # Update compound_solution with operation indicator
                     compound_solution['operation_indicators'] = [
                         (old_indicator, operation_type, '')
                     ]
                     compound_solution['unresolved_words'] = [
-                        w for w in unresolved 
+                        w for w in unresolved
                         if norm_letters(w) != norm_letters(new_anagram_indicator)
                     ]
 
@@ -652,8 +656,9 @@ class CompoundWordplayAnalyzer:
             # Check if all words are accounted for (pure anagram, no compound needed)
             # Use norm_letters to handle punctuation (e.g., "Yes," vs "yes")
             accounted_normalized = {norm_letters(a) for a in accounted_words}
-            remaining_unresolved = [w for w in clue_words if norm_letters(w) not in accounted_normalized]
-            
+            remaining_unresolved = [w for w in clue_words if
+                                    norm_letters(w) not in accounted_normalized]
+
             # If no compound_solution but all words accounted for, mark as fully resolved
             if compound_solution is None and not remaining_unresolved:
                 compound_solution = {
@@ -665,6 +670,18 @@ class CompoundWordplayAnalyzer:
                     'fully_resolved': False,
                     'unresolved_words': remaining_unresolved
                 }
+
+            # Mark partial anagrams as 2 (stays in anagram cohort, not forwarded to general)
+            # Values: 0 = no anagram, 1 = fully resolved, 2 = partial anagram
+            # Check if anagram stage already validated this as a partial anagram
+            anagrams = case.get('anagrams', [])
+            is_validated_partial = any(
+                hit.get('solve_type') == 'anagram_evidence_partial' 
+                for hit in anagrams
+            )
+            if compound_solution and is_validated_partial:
+                if compound_solution.get('letters_still_needed'):
+                    compound_solution['fully_resolved'] = 2
 
             # Format answers with spaces for multi-word enumerations
             enumeration = case.get('enumeration', '')
@@ -688,6 +705,16 @@ class CompoundWordplayAnalyzer:
                 'explanation': explanation,
                 'remaining_unresolved': remaining_unresolved
             }
+
+            # SURGICAL FIX: Reconstruct fodder_words from word_roles if empty
+            if not fodder_words and word_roles:
+                fodder_from_roles = [wr.word for wr in word_roles if wr.role == 'fodder']
+                if fodder_from_roles:
+                    fodder_words = fodder_from_roles
+                    if not fodder_letters:
+                        fodder_letters = ''.join(
+                            c.upper() for w in fodder_words for c in w if c.isalpha()
+                        )
 
         # Fall back to evidence_analysis path for non-exact matches
         # Get evidence analysis results
@@ -739,7 +766,7 @@ class CompoundWordplayAnalyzer:
                     # This "definition" is actually the indicator!
                     # Find real definition from remaining words at clue edges
                     fodder_lower = {w.lower() for w in fodder_words}
-                    
+
                     # Find contiguous words at end that aren't fodder or this indicator
                     end_def_words = []
                     for w in reversed(clue_words):
@@ -747,7 +774,7 @@ class CompoundWordplayAnalyzer:
                         if w_clean in fodder_lower or w_clean == def_words[0].lower():
                             break
                         end_def_words.insert(0, w)
-                    
+
                     if end_def_words:
                         # Use end words as definition
                         definition_window = ' '.join(end_def_words)
@@ -755,7 +782,7 @@ class CompoundWordplayAnalyzer:
         # First try to get indicator from evidence (already found by evidence system)
         anagram_indicator = None
         evidence_indicator = None
-        
+
         if hasattr(evidence, 'indicator_words') and evidence.indicator_words:
             # Evidence system found an indicator
             evidence_indicator = ' '.join(evidence.indicator_words)
@@ -764,7 +791,7 @@ class CompoundWordplayAnalyzer:
         # This ensures we pick the highest-frequency indicator
         frequency_indicator = self._find_anagram_indicator(clue_words, fodder_words,
                                                            definition_window)
-        
+
         # Prefer frequency-based indicator if found, otherwise use evidence indicator
         if frequency_indicator:
             anagram_indicator = frequency_indicator
@@ -839,7 +866,7 @@ class CompoundWordplayAnalyzer:
                 accounted_words,
                 clue_words, definition_window
             )
-        
+
         # Check if indicator reassignment is needed (orphaned substitution case)
         # This handles "terribly honest about character" where "about" should be
         # container indicator, not anagram indicator
@@ -849,10 +876,10 @@ class CompoundWordplayAnalyzer:
                 anagram_indicator, compound_solution, unresolved,
                 fodder_words, definition_window
             )
-            
+
             if reassignment:
                 new_anagram_indicator, operation_type = reassignment
-                
+
                 # Update word_roles: change old anagram indicator to operation indicator
                 for wr in word_roles:
                     if wr.word.lower() == anagram_indicator.lower() and wr.role == 'anagram_indicator':
@@ -860,29 +887,31 @@ class CompoundWordplayAnalyzer:
                         wr.role = 'operation_indicator'
                         wr.source = f'database ({operation_type})'
                         break
-                
+
                 # Add new anagram indicator to word_roles
                 word_roles.append(WordRole(
-                    new_anagram_indicator, 'anagram_indicator', '', 'database (reassigned)'
+                    new_anagram_indicator, 'anagram_indicator', '',
+                    'database (reassigned)'
                 ))
                 accounted_words.add(new_anagram_indicator.lower())
-                
+
                 # Update anagram_indicator for explanation
                 old_indicator = anagram_indicator
                 anagram_indicator = new_anagram_indicator
-                
+
                 # Re-run compound analysis with the corrected remaining words
                 # (now excluding the new indicator)
-                remaining_words = [w for w in remaining_words 
-                                   if norm_letters(w) != norm_letters(new_anagram_indicator)]
-                
+                remaining_words = [w for w in remaining_words
+                                   if
+                                   norm_letters(w) != norm_letters(new_anagram_indicator)]
+
                 if remaining_words:
                     # Add the operation indicator to compound_solution
                     compound_solution['operation_indicators'] = [
                         (old_indicator, operation_type, '')
                     ]
                     compound_solution['unresolved_words'] = [
-                        w for w in unresolved 
+                        w for w in unresolved
                         if norm_letters(w) != norm_letters(new_anagram_indicator)
                     ]
 
@@ -905,9 +934,10 @@ class CompoundWordplayAnalyzer:
         )
 
         # Check if all words are accounted for (pure anagram, no compound needed)
-        remaining_unresolved = [w for w in clue_words 
-                               if norm_letters(w) not in {norm_letters(a) for a in accounted_words}]
-        
+        remaining_unresolved = [w for w in clue_words
+                                if norm_letters(w) not in {norm_letters(a) for a in
+                                                           accounted_words}]
+
         # If no compound_solution but all words accounted for, mark as fully resolved
         if compound_solution is None and not remaining_unresolved:
             compound_solution = {
@@ -919,6 +949,28 @@ class CompoundWordplayAnalyzer:
                 'fully_resolved': False,
                 'unresolved_words': remaining_unresolved
             }
+
+        # Mark partial anagrams as 2 (stays in anagram cohort, not forwarded to general)
+        # Values: 0 = no anagram, 1 = fully resolved, 2 = partial anagram
+        # Check if anagram stage already validated this as a partial anagram
+        anagrams = case.get('anagrams', [])
+        is_validated_partial = any(
+            hit.get('solve_type') == 'anagram_evidence_partial' 
+            for hit in anagrams
+        )
+        if compound_solution and is_validated_partial:
+            if compound_solution.get('letters_still_needed'):
+                compound_solution['fully_resolved'] = 2
+
+        # SURGICAL FIX: Reconstruct fodder_words from word_roles if empty
+        if not fodder_words and word_roles:
+            fodder_from_roles = [wr.word for wr in word_roles if wr.role == 'fodder']
+            if fodder_from_roles:
+                fodder_words = fodder_from_roles
+                if not fodder_letters:
+                    fodder_letters = ''.join(
+                        c.upper() for w in fodder_words for c in w if c.isalpha()
+                    )
 
         # Format answers with spaces for multi-word enumerations
         enumeration = case.get('enumeration', '')
@@ -952,7 +1004,7 @@ class CompoundWordplayAnalyzer:
 
         CORRECTED: Now searches only remaining words (clue - definition - fodder).
         The indicator must be in the remaining words, not in the definition or fodder.
-        
+
         UPDATED: Now prefers higher frequency indicators when multiple candidates exist.
 
         1. First try two-word indicators in database (excluding definition and fodder)
@@ -995,7 +1047,8 @@ class CompoundWordplayAnalyzer:
                 continue
             indicator_match = self.db.lookup_indicator(word)
             if indicator_match and indicator_match.wordplay_type == 'anagram':
-                indicator_candidates.append((word, indicator_match.frequency, indicator_match))
+                indicator_candidates.append(
+                    (word, indicator_match.frequency, indicator_match))
 
         # If we found indicators, return the one with highest frequency
         if indicator_candidates:
@@ -1085,39 +1138,40 @@ class CompoundWordplayAnalyzer:
         return None
 
     def _check_indicator_reassignment_needed(self, anagram_indicator: str,
-                                              compound_solution: Dict,
-                                              unresolved_words: List[str],
-                                              fodder_words: List[str],
-                                              definition_window: Optional[str]) -> Optional[Tuple[str, str]]:
+                                             compound_solution: Dict,
+                                             unresolved_words: List[str],
+                                             fodder_words: List[str],
+                                             definition_window: Optional[str]) -> \
+    Optional[Tuple[str, str]]:
         """
         Check if the anagram indicator should be reassigned as a container/insertion indicator.
-        
+
         This handles cases like "terribly honest about character" where:
         - "about" was selected as anagram indicator (high frequency as anagram)
         - "character" -> CARD was found as substitution (orphaned - no operation indicator)
         - But "about" is ALSO a container indicator
         - "terribly" is a valid anagram indicator in unresolved words
-        
+
         Returns: (new_anagram_indicator, operation_indicator_type) or None if no reassignment needed
         """
         if not compound_solution or not anagram_indicator:
             return None
-        
+
         # Check if there are substitutions but NO operation indicators
         substitutions = compound_solution.get('substitutions', [])
         operation_indicators = compound_solution.get('operation_indicators', [])
-        
+
         if not substitutions or operation_indicators:
             # Either no substitutions, or already have operation indicator - no reassignment needed
             return None
-        
+
         # We have orphaned substitution(s) - check if current anagram indicator is also container/insertion
         indicator_word = norm_letters(anagram_indicator.split()[0])  # Handle multi-word
         indicator_match = self.db.lookup_indicator(indicator_word)
-        
+
         if not indicator_match:
             return None
-        
+
         # Check if this indicator is ALSO a container or insertion indicator
         # Query DB directly to check all types for this word
         conn = self.db._get_connection()
@@ -1127,40 +1181,40 @@ class CompoundWordplayAnalyzer:
             WHERE LOWER(word) = ? AND wordplay_type IN ('container', 'insertion')
         """, (indicator_word,))
         alt_types = cursor.fetchall()
-        
+
         if not alt_types:
             # Current indicator is not also a container/insertion indicator
             return None
-        
+
         operation_type = alt_types[0][0]  # 'container' or 'insertion'
-        
+
         # Now check if there's another valid anagram indicator in unresolved_words
         fodder_lower = {norm_letters(w) for w in fodder_words}
         def_words_lower = set()
         if definition_window:
             def_words_lower = {norm_letters(w) for w in definition_window.split()}
-        
+
         # Look for alternative anagram indicator in unresolved words
         for word in unresolved_words:
             word_norm = norm_letters(word)
-            
+
             # Skip if it's fodder or definition
             if word_norm in fodder_lower or word_norm in def_words_lower:
                 continue
-            
+
             # Check if this word is a valid anagram indicator
             alt_indicator = self.db.lookup_indicator(word)
             if alt_indicator and alt_indicator.wordplay_type == 'anagram':
                 # Found an alternative anagram indicator!
                 # Return the reassignment: (new anagram indicator, operation type for old indicator)
                 return (word, operation_type)
-        
+
         return None
 
     def _reassign_fodder_near_insertion_indicators(self, fodder_words: List[str],
                                                    clue_words: List[str],
                                                    anagram_indicator: Optional[str]) -> \
-    Tuple[List[str], List[str]]:
+            Tuple[List[str], List[str]]:
         """
         Check if any fodder words should be reassigned as insertion/container material.
 
@@ -1286,6 +1340,52 @@ class CompoundWordplayAnalyzer:
         if case.get('definition'):
             return case.get('definition')
 
+        # NEW FALLBACK: Query definition_answers_augmented table
+        definition = self._find_definition_from_db(answer, clue_words)
+        if definition:
+            return definition
+
+        return None
+
+    def _find_definition_from_db(self, answer: str, clue_words: List[str]) -> Optional[
+        str]:
+        """
+        Find definition by looking up known definitions for this answer
+        in definition_answers_augmented table, then checking which appears in clue.
+
+        Returns the definition phrase if found, None otherwise.
+        """
+        if not answer:
+            return None
+
+        answer_upper = answer.upper().replace(' ', '')
+
+        conn = self.db._get_connection()
+        cursor = conn.cursor()
+
+        # Get all known definitions for this answer
+        cursor.execute("""
+            SELECT DISTINCT definition 
+            FROM definition_answers_augmented 
+            WHERE UPPER(REPLACE(answer, ' ', '')) = ?
+        """, (answer_upper,))
+
+        known_definitions = [row[0] for row in cursor.fetchall()]
+
+        if not known_definitions:
+            return None
+
+        # Build clue text for matching (lowercase, without enumeration)
+        clue_text_lower = ' '.join(clue_words).lower()
+
+        # Sort by length (prefer longer/more specific definitions)
+        known_definitions.sort(key=len, reverse=True)
+
+        # Check which definition appears in the clue
+        for defn in known_definitions:
+            if defn.lower() in clue_text_lower:
+                return defn
+
         return None
 
     def _analyze_remaining_words(self, remaining_words: List[str],
@@ -1376,20 +1476,22 @@ class CompoundWordplayAnalyzer:
         # IMPORTANT: Check TWO-WORD indicators FIRST to catch "found in" before "in" alone
         insertion_indicators_in_remaining = {}  # position -> (word, indicator_match)
         words_used_by_two_word_indicators = set()  # Track words used in two-word indicators
-        
+
         # Check two-word container/insertion indicators first
         for i in range(len(remaining_words) - 1):
             word1 = remaining_words[i]
             word2 = remaining_words[i + 1]
             two_word = f"{norm_letters(word1)} {norm_letters(word2)}"
             indicator_match = self.db.lookup_indicator(two_word)
-            
-            if indicator_match and indicator_match.wordplay_type in ('insertion', 'container'):
+
+            if indicator_match and indicator_match.wordplay_type in ('insertion',
+                                                                     'container'):
                 # Found a two-word indicator like "found in"
-                insertion_indicators_in_remaining[i] = (f"{word1} {word2}", indicator_match)
+                insertion_indicators_in_remaining[i] = (f"{word1} {word2}",
+                                                        indicator_match)
                 words_used_by_two_word_indicators.add(word1.lower())
                 words_used_by_two_word_indicators.add(word2.lower())
-        
+
         # Now check single-word indicators, but skip words already used in two-word indicators
         for i, word in enumerate(remaining_words):
             if word.lower() in words_used_by_two_word_indicators:
@@ -1409,7 +1511,7 @@ class CompoundWordplayAnalyzer:
             two_word = f"{norm_letters(word)} {norm_letters(remaining_words[i + 1])}"
             indicator_match = self.db.lookup_indicator(two_word)
 
-            if indicator_match and indicator_match.wordplay_type == 'parts':
+            if indicator_match and indicator_match.wordplay_type in ('parts', 'acrostic'):
                 subtype = indicator_match.subtype or ''
 
                 # Find the source word (word adjacent to the indicator that provides the letter)
@@ -1455,8 +1557,9 @@ class CompoundWordplayAnalyzer:
                             extracted_letter = source_letters[0]
                         elif 'last' in subtype.lower() and source_letters:
                             extracted_letter = source_letters[-1]
-                        elif ('outer' in subtype.lower() or 'edge' in subtype.lower() or 
-                              'case' in subtype.lower() or 'border' in subtype.lower()) and len(source_letters) >= 2:
+                        elif ('outer' in subtype.lower() or 'edge' in subtype.lower() or
+                              'case' in subtype.lower() or 'border' in subtype.lower()) and len(
+                            source_letters) >= 2:
                             # Outer/edges/case = first AND last letters
                             extracted_letters = source_letters[0] + source_letters[-1]
 
@@ -1475,9 +1578,10 @@ class CompoundWordplayAnalyzer:
                                  source_word.lower()])
 
                             # Update needed letters
-                            needed_letters = needed_letters.replace(extracted_letter.upper(), '',
-                                                                    1)
-                        
+                            needed_letters = needed_letters.replace(
+                                extracted_letter.upper(), '',
+                                1)
+
                         # Handle outer/edges (two letters)
                         elif extracted_letters:
                             # Check if BOTH letters are needed
@@ -1489,7 +1593,7 @@ class CompoundWordplayAnalyzer:
                                 else:
                                     can_use = False
                                     break
-                            
+
                             if can_use:
                                 parts_found.append({
                                     'indicator': f"{word} {remaining_words[i + 1]}",
@@ -1548,11 +1652,13 @@ class CompoundWordplayAnalyzer:
 
         # Add two-word container/insertion indicators to operation_indicators
         # These were found in the FIRST PASS and should be prioritized
-        for pos, (indicator_phrase, indicator_match) in insertion_indicators_in_remaining.items():
+        for pos, (indicator_phrase,
+                  indicator_match) in insertion_indicators_in_remaining.items():
             if ' ' in indicator_phrase:  # This is a two-word indicator
                 operation_indicators.append((indicator_phrase, indicator_match))
                 word_roles.append(WordRole(
-                    indicator_phrase, f'{indicator_match.wordplay_type}_indicator', '', 'database'
+                    indicator_phrase, f'{indicator_match.wordplay_type}_indicator', '',
+                    'database'
                 ))
                 # Mark both words as accounted
                 for w in indicator_phrase.split():
@@ -1565,7 +1671,7 @@ class CompoundWordplayAnalyzer:
             # Skip words already processed by parts indicators
             if word_lower in words_used_by_parts:
                 continue
-            
+
             # Skip words already used in two-word indicators (e.g., "found" and "in" from "found in")
             if word_lower in words_used_by_two_word_indicators:
                 continue
@@ -1586,9 +1692,12 @@ class CompoundWordplayAnalyzer:
 
                 # Handle single-word parts indicators (like "initially", "finally", "almost")
                 # Also handle acrostic indicators with initial/final subtypes
-                elif op_type == 'parts' or (op_type == 'acrostic' and indicator_match.subtype in ('initial', 'final')):
+                elif op_type == 'parts' or (
+                        op_type == 'acrostic' and indicator_match.subtype in ('initial',
+                                                                              'final')):
                     subtype = indicator_match.subtype or ''
-                    print(f"DEBUG acrostic: Found indicator '{word}' type={op_type} subtype='{subtype}'")
+                    print(
+                        f"DEBUG acrostic: Found indicator '{word}' type={op_type} subtype='{subtype}'")
                     print(f"DEBUG acrostic: remaining_words = {remaining_words}")
                     print(f"DEBUG acrostic: needed_letters = {needed_letters}")
                     # Find adjacent word in remaining_words to operate on
@@ -1598,20 +1707,23 @@ class CompoundWordplayAnalyzer:
                         print(f"DEBUG acrostic: current_idx = {current_idx}")
                         source_word = None
                         source_letters = None
-                        
+
                         # Try next word first
                         if current_idx + 1 < len(remaining_words):
                             source_word = remaining_words[current_idx + 1]
                             source_letters = get_letters(source_word)
-                            print(f"DEBUG acrostic: Found next word: {source_word} -> {source_letters}")
-                        
+                            print(
+                                f"DEBUG acrostic: Found next word: {source_word} -> {source_letters}")
+
                         # If no next word, try previous word
                         if source_word is None and current_idx > 0:
                             source_word = remaining_words[current_idx - 1]
                             source_letters = get_letters(source_word)
-                            print(f"DEBUG acrostic: Found previous word: {source_word} -> {source_letters}")
-                        
-                        print(f"DEBUG acrostic: source_word={source_word}, source_letters={source_letters}")
+                            print(
+                                f"DEBUG acrostic: Found previous word: {source_word} -> {source_letters}")
+
+                        print(
+                            f"DEBUG acrostic: source_word={source_word}, source_letters={source_letters}")
                         if source_word and source_letters:
 
                             # Check if this is a DELETE operation (remove letter, use rest as fodder)
@@ -1639,7 +1751,8 @@ class CompoundWordplayAnalyzer:
 
                                     if can_use or not needed_letters:
                                         # Add indicator
-                                        delete_type = 'last' if ('last' in subtype.lower() or subtype.lower() == 'final') else 'first'
+                                        delete_type = 'last' if (
+                                                    'last' in subtype.lower() or subtype.lower() == 'final') else 'first'
                                         word_roles.append(WordRole(
                                             word, 'parts_indicator', '',
                                             f"database ({subtype})"
@@ -1670,9 +1783,11 @@ class CompoundWordplayAnalyzer:
                             elif needed_letters:
                                 extracted_letter = None
 
-                                if ('first' in subtype.lower() or subtype.lower() == 'initial') and source_letters:
+                                if (
+                                        'first' in subtype.lower() or subtype.lower() == 'initial') and source_letters:
                                     extracted_letter = source_letters[0]
-                                elif ('last' in subtype.lower() or subtype.lower() == 'final') and source_letters:
+                                elif (
+                                        'last' in subtype.lower() or subtype.lower() == 'final') and source_letters:
                                     extracted_letter = source_letters[-1]
 
                                 if extracted_letter and extracted_letter in needed_letters:
@@ -1684,7 +1799,8 @@ class CompoundWordplayAnalyzer:
                                     accounted_words.add(word_lower)
 
                                     # Add source word with readable description
-                                    source_desc = 'last letter of' if ('last' in subtype.lower() or subtype.lower() == 'final') else 'first letter of'
+                                    source_desc = 'last letter of' if (
+                                                'last' in subtype.lower() or subtype.lower() == 'final') else 'first letter of'
                                     word_roles.append(WordRole(
                                         source_word, 'substitution', extracted_letter,
                                         source_desc
@@ -1714,7 +1830,8 @@ class CompoundWordplayAnalyzer:
             if word_lower in self.positional_words and word_lower not in def_words_lower:
                 if word_lower not in accounted_words:
                     positional_indicators.append(word)
-                    word_roles.append(WordRole(word, 'positional_indicator', '', 'heuristic'))
+                    word_roles.append(
+                        WordRole(word, 'positional_indicator', '', 'heuristic'))
                     accounted_words.add(word_lower)
                     continue
 
@@ -1764,17 +1881,20 @@ class CompoundWordplayAnalyzer:
 
             # Check if this word might be a parts indicator followed by "of"
             # Skip substitution lookup for words like "case", "edges", "borders", etc.
-            parts_indicator_words = {'case', 'cases', 'edges', 'edge', 'borders', 'border', 
-                                    'extremes', 'extreme', 'limits', 'outsides', 'outside',
-                                    'ends', 'head', 'tail', 'front', 'back', 'top', 'bottom'}
-            
+            parts_indicator_words = {'case', 'cases', 'edges', 'edge', 'borders',
+                                     'border',
+                                     'extremes', 'extreme', 'limits', 'outsides',
+                                     'outside',
+                                     'ends', 'head', 'tail', 'front', 'back', 'top',
+                                     'bottom'}
+
             # Find position of current word in remaining_words
             word_idx = None
             for idx, w in enumerate(remaining_words):
                 if w.lower() == word_lower:
                     word_idx = idx
                     break
-            
+
             # If this word is a parts indicator and next word is "of", skip synonym lookup
             if word_lower in parts_indicator_words:
                 if word_idx is not None and word_idx + 1 < len(remaining_words):
@@ -1786,7 +1906,8 @@ class CompoundWordplayAnalyzer:
                             source_word = remaining_words[word_idx + 2]
                             source_letters = get_letters(source_word)
                             if len(source_letters) >= 2:
-                                outer_letters = (source_letters[0] + source_letters[-1]).upper()
+                                outer_letters = (source_letters[0] + source_letters[
+                                    -1]).upper()
                                 # Check if both outer letters are needed
                                 temp_needed = needed_letters
                                 can_use = True
@@ -1796,13 +1917,15 @@ class CompoundWordplayAnalyzer:
                                     else:
                                         can_use = False
                                         break
-                                
+
                                 if can_use:
                                     word_roles.append(WordRole(
-                                        word, 'parts_indicator', '', f"outer letters indicator"
+                                        word, 'parts_indicator', '',
+                                        f"outer letters indicator"
                                     ))
                                     word_roles.append(WordRole(
-                                        source_word, 'fodder', outer_letters, f"outer letters of {source_word}"
+                                        source_word, 'fodder', outer_letters,
+                                        f"outer letters of {source_word}"
                                     ))
                                     accounted_words.add(word_lower)
                                     accounted_words.add('of')
@@ -1812,7 +1935,8 @@ class CompoundWordplayAnalyzer:
 
             # Check for substitution
             # Pass needed_letters length so we can find longer synonyms when needed
-            subs = self.db.lookup_substitution(word, max_synonym_length=len(needed_letters))
+            subs = self.db.lookup_substitution(word,
+                                               max_synonym_length=len(needed_letters))
             for sub in subs:
                 # Check if this substitution provides letters we need (with correct counts)
                 sub_letters = sub.letters.upper()
@@ -1834,7 +1958,7 @@ class CompoundWordplayAnalyzer:
                     # Update needed letters
                     for c in sub_letters:
                         needed_letters = needed_letters.replace(c, '', 1)
-                    
+
                     # NEW: Check for adjacent positional/insertion indicator
                     # This claims words like "in" as positional indicators for the substitution
                     # preventing them from being incorrectly used as anagram fodder
@@ -1845,16 +1969,17 @@ class CompoundWordplayAnalyzer:
                             adjacent_indices.append(sub_word_idx - 1)
                         if sub_word_idx < len(remaining_words) - 1:
                             adjacent_indices.append(sub_word_idx + 1)
-                        
+
                         for adj_idx in adjacent_indices:
                             adj_word = remaining_words[adj_idx]
                             adj_lower = adj_word.lower()
-                            
+
                             if adj_lower in accounted_words:
                                 continue
-                            
+
                             adj_indicator = self.db.lookup_indicator(adj_word)
-                            if adj_indicator and adj_indicator.wordplay_type in ('insertion', 'container'):
+                            if adj_indicator and adj_indicator.wordplay_type in (
+                                    'insertion', 'container'):
                                 positional_indicators.append(adj_word)
                                 word_roles.append(WordRole(
                                     adj_word, 'positional_indicator', '',
@@ -1864,7 +1989,7 @@ class CompoundWordplayAnalyzer:
                                 break
                     except ValueError:
                         pass
-                    
+
                     break  # Stop at first valid substitution for this word
 
         # Check for TWO-WORD phrase substitutions (e.g., "the french" -> LA)
@@ -1875,15 +2000,15 @@ class CompoundWordplayAnalyzer:
                 word2 = remaining_words[i + 1]
                 word1_lower = word1.lower()
                 word2_lower = word2.lower()
-                
+
                 # Skip if either word already accounted for
                 if word1_lower in accounted_words or word2_lower in accounted_words:
                     continue
-                
+
                 # Build the phrase and look it up
                 phrase = f"{word1_lower} {word2_lower}"
                 phrase_subs = self.db.lookup_phrase_substitution(phrase)
-                
+
                 for sub in phrase_subs:
                     sub_letters = sub.letters.upper()
                     temp_needed = list(needed_letters)
@@ -1910,19 +2035,20 @@ class CompoundWordplayAnalyzer:
 
         # Build compound solution
         # Collect unresolved words for self-learning
-        unresolved_words = [w for w in remaining_words 
-                           if w.lower() not in accounted_words and w.lower() not in def_words_lower]
-        
+        unresolved_words = [w for w in remaining_words
+                            if
+                            w.lower() not in accounted_words and w.lower() not in def_words_lower]
+
         # Check for orphaned deletion indicators (indicators without source words)
         # This handles "step half missing" where "half" and "missing" are deletion indicators
         # but "step" hasn't been connected as the deletion source
-        deletion_indicators_found = [(w, i) for w, i in operation_indicators 
+        deletion_indicators_found = [(w, i) for w, i in operation_indicators
                                      if i.wordplay_type == 'deletion']
-        
+
         if deletion_indicators_found and needed_letters and unresolved_words:
             # We have deletion indicators but still need letters
             # Check unresolved words to see if applying deletion provides needed letters
-            
+
             # Find positions of deletion indicators in clue
             deletion_ind_positions = {}
             for del_word, del_ind in deletion_indicators_found:
@@ -1930,50 +2056,51 @@ class CompoundWordplayAnalyzer:
                     if norm_letters(cw) == norm_letters(del_word):
                         deletion_ind_positions[idx] = (del_word, del_ind)
                         break
-            
+
             for unres_word in list(unresolved_words):  # Copy list since we modify it
                 unres_lower = unres_word.lower()
                 unres_letters = get_letters(unres_word)
-                
+
                 if len(unres_letters) < 2:
                     continue
-                
+
                 # Find position of unresolved word
                 unres_idx = None
                 for idx, cw in enumerate(clue_words):
                     if norm_letters(cw) == norm_letters(unres_word):
                         unres_idx = idx
                         break
-                
+
                 if unres_idx is None:
                     continue
-                
+
                 # Check if adjacent to any deletion indicator (within 2 positions)
                 adjacent_deletion = None
                 for del_idx, (del_word, del_ind) in deletion_ind_positions.items():
                     if abs(unres_idx - del_idx) <= 2:
                         adjacent_deletion = (del_word, del_ind)
                         break
-                
+
                 if not adjacent_deletion:
                     continue
-                
+
                 del_word, del_ind = adjacent_deletion
                 del_subtype = (del_ind.subtype or '').lower()
                 del_word_norm = norm_letters(del_word)
-                
+
                 # Determine what part to take based on deletion indicator
                 candidate_letters = None
                 deletion_desc = ''
-                
+
                 # "half" indicators - take first or second half
                 if 'half' in del_word_norm or 'half' in del_subtype:
                     half_len = len(unres_letters) // 2
                     first_half = unres_letters[:half_len].upper()
                     second_half = unres_letters[half_len:].upper()
-                    
+
                     # Check which half provides needed letters
-                    for half, desc in [(first_half, 'first half'), (second_half, 'second half')]:
+                    for half, desc in [(first_half, 'first half'),
+                                       (second_half, 'second half')]:
                         temp_needed = needed_letters
                         can_use = True
                         for c in half:
@@ -1986,9 +2113,10 @@ class CompoundWordplayAnalyzer:
                             candidate_letters = half
                             deletion_desc = desc
                             break
-                
+
                 # "first" / "head" / "opener" indicators - missing first means take rest
-                elif any(x in del_subtype for x in ['first', 'head', 'open', 'start', 'initial']):
+                elif any(x in del_subtype for x in
+                         ['first', 'head', 'open', 'start', 'initial']):
                     remaining = unres_letters[1:].upper()
                     temp_needed = needed_letters
                     can_use = True
@@ -2001,7 +2129,7 @@ class CompoundWordplayAnalyzer:
                     if can_use:
                         candidate_letters = remaining
                         deletion_desc = 'minus first letter'
-                
+
                 # "last" / "tail" / "end" indicators - missing last means take rest
                 elif any(x in del_subtype for x in ['last', 'tail', 'end', 'final']):
                     remaining = unres_letters[:-1].upper()
@@ -2016,7 +2144,7 @@ class CompoundWordplayAnalyzer:
                     if can_use:
                         candidate_letters = remaining
                         deletion_desc = 'minus last letter'
-                
+
                 if candidate_letters:
                     # Found a match! Add this word as deletion source
                     word_roles.append(WordRole(
@@ -2024,16 +2152,16 @@ class CompoundWordplayAnalyzer:
                         f'{deletion_desc} of {unres_word}'
                     ))
                     accounted_words.add(unres_lower)
-                    
+
                     # Update needed_letters
                     for c in candidate_letters:
                         needed_letters = needed_letters.replace(c, '', 1)
-                    
+
                     # Remove from unresolved
-                    unresolved_words = [w for w in unresolved_words 
-                                       if norm_letters(w) != norm_letters(unres_word)]
+                    unresolved_words = [w for w in unresolved_words
+                                        if norm_letters(w) != norm_letters(unres_word)]
                     break  # Only process one deletion source
-        
+
         solution = {
             'needed_letters_original': answer_upper,
             'anagram_provides': anagram_upper,
@@ -2109,7 +2237,8 @@ class CompoundWordplayAnalyzer:
             word_for_lookup_lower = word_for_lookup.lower()
 
             # Check if this word substitutes to the excess letters
-            subs = self.db.lookup_substitution(word_for_lookup, max_synonym_length=len(excess_letters))
+            subs = self.db.lookup_substitution(word_for_lookup,
+                                               max_synonym_length=len(excess_letters))
             for sub in subs:
                 sub_letters = sub.letters.upper()
                 if sorted(sub_letters) == sorted(excess_letters):
@@ -2334,8 +2463,10 @@ class CompoundWordplayAnalyzer:
                 continue
 
             # Check indicators table
+            # For pure anagrams, only mark additional anagram indicators
+            # Other indicator types (deletion, acrostic, etc.) are not performing any operation
             indicator_match = self.db.lookup_indicator(word)
-            if indicator_match:
+            if indicator_match and indicator_match.wordplay_type == 'anagram':
                 classified.append((word, indicator_match.wordplay_type))
                 word_roles.append(WordRole(
                     word, f'{indicator_match.wordplay_type}_indicator', '', 'database'
@@ -2450,7 +2581,8 @@ def test_with_sample_case():
             missing = cs['letters_still_needed']
             unresolved = cs.get('unresolved_words', [])
             if unresolved:
-                print(f"  Indicator and fodder unaccounted for: {missing.upper()} from {unresolved}")
+                print(
+                    f"  Indicator and fodder unaccounted for: {missing.upper()} from {unresolved}")
             else:
                 print(f"  Letters unaccounted for: {missing.upper()}")
         print(f"  Fully resolved: {cs.get('fully_resolved', False)}")
