@@ -523,32 +523,6 @@ class CompoundWordplayAnalyzer:
             # Get definition from pipeline data
             definition_window = self._get_definition_window(case, clue_words)
 
-            # CHECK: Is the definition_window actually an anagram indicator?
-            # This fixes cases like "Yes, a film about short-lived creatures" where
-            # "about" is the indicator but was matched as definition
-            if definition_window:
-                def_words = definition_window.split()
-                if len(def_words) == 1:
-                    # Single-word definition - check if it's an anagram indicator
-                    indicator_check = self.db.lookup_indicator(def_words[0])
-                    if indicator_check and indicator_check.wordplay_type == 'anagram':
-                        # This "definition" is actually the indicator!
-                        # Find real definition from remaining words at clue edges
-                        fodder_lower = {w.lower() for w in fodder_words}
-
-                        # Find contiguous words at start or end that aren't fodder or this indicator
-                        # Prefer end of clue (more common for definitions)
-                        end_def_words = []
-                        for w in reversed(clue_words):
-                            w_clean = ''.join(c for c in w if c.isalpha()).lower()
-                            if w_clean in fodder_lower or w_clean == def_words[0].lower():
-                                break
-                            end_def_words.insert(0, w)
-
-                        if end_def_words:
-                            # Use end words as definition, original "definition" as indicator
-                            definition_window = ' '.join(end_def_words)
-
             # Find anagram indicator using our method (not evidence garbage)
             anagram_indicator = self._find_anagram_indicator(
                 clue_words, fodder_words, definition_window
@@ -676,7 +650,7 @@ class CompoundWordplayAnalyzer:
             # Check if anagram stage already validated this as a partial anagram
             anagrams = case.get('anagrams', [])
             is_validated_partial = any(
-                hit.get('solve_type') == 'anagram_evidence_partial' 
+                hit.get('solve_type') == 'anagram_evidence_partial'
                 for hit in anagrams
             )
             if compound_solution and is_validated_partial:
@@ -753,31 +727,6 @@ class CompoundWordplayAnalyzer:
         # Extract anagram component
         fodder_words = evidence.fodder_words or []
         fodder_letters = evidence.fodder_letters or ''
-
-        # CHECK: Is the definition_window actually an anagram indicator?
-        # This fixes cases like "Yes, a film about short-lived creatures" where
-        # "about" is the indicator but was matched as definition
-        if definition_window:
-            def_words = definition_window.split()
-            if len(def_words) == 1:
-                # Single-word definition - check if it's an anagram indicator
-                indicator_check = self.db.lookup_indicator(def_words[0])
-                if indicator_check and indicator_check.wordplay_type == 'anagram':
-                    # This "definition" is actually the indicator!
-                    # Find real definition from remaining words at clue edges
-                    fodder_lower = {w.lower() for w in fodder_words}
-
-                    # Find contiguous words at end that aren't fodder or this indicator
-                    end_def_words = []
-                    for w in reversed(clue_words):
-                        w_clean = ''.join(c for c in w if c.isalpha()).lower()
-                        if w_clean in fodder_lower or w_clean == def_words[0].lower():
-                            break
-                        end_def_words.insert(0, w)
-
-                    if end_def_words:
-                        # Use end words as definition
-                        definition_window = ' '.join(end_def_words)
 
         # First try to get indicator from evidence (already found by evidence system)
         anagram_indicator = None
@@ -955,7 +904,7 @@ class CompoundWordplayAnalyzer:
         # Check if anagram stage already validated this as a partial anagram
         anagrams = case.get('anagrams', [])
         is_validated_partial = any(
-            hit.get('solve_type') == 'anagram_evidence_partial' 
+            hit.get('solve_type') == 'anagram_evidence_partial'
             for hit in anagrams
         )
         if compound_solution and is_validated_partial:
@@ -1393,7 +1342,8 @@ class CompoundWordplayAnalyzer:
                                  word_roles: List[WordRole],
                                  accounted_words: Set[str],
                                  clue_words: List[str],
-                                 definition_window: Optional[str]) -> Optional[
+                                 definition_window: Optional[str],
+                                 skip_indicator_words: Optional[Set[str]] = None) -> Optional[
         Dict[str, Any]]:
         """
         Analyze remaining words by querying the database.
@@ -1664,6 +1614,40 @@ class CompoundWordplayAnalyzer:
                 for w in indicator_phrase.split():
                     accounted_words.add(w.lower())
 
+        # PRE-PASS: When retrying with skipped indicators, process those words
+        # as synonyms FIRST before the main loop. This prevents other words from
+        # greedily consuming needed letters and shrinking max_synonym_length below
+        # what the skipped indicator's synonym actually needs.
+        if skip_indicator_words and needed_letters:
+            for word in remaining_words:
+                word_lower = word.lower()
+                if word_lower not in skip_indicator_words:
+                    continue
+                if word_lower in accounted_words or word_lower in def_words_lower:
+                    continue
+                subs = self.db.lookup_substitution(word,
+                                                    max_synonym_length=len(needed_letters))
+                for sub in subs:
+                    sub_letters = sub.letters.upper()
+                    temp_needed = list(needed_letters)
+                    can_use = True
+                    for c in sub_letters:
+                        if c in temp_needed:
+                            temp_needed.remove(c)
+                        else:
+                            can_use = False
+                            break
+                    if can_use:
+                        found_substitutions.append((word, sub))
+                        word_roles.append(WordRole(
+                            word, 'substitution', sub_letters,
+                            f'database ({sub.category})'
+                        ))
+                        accounted_words.add(word_lower)
+                        for c in sub_letters:
+                            needed_letters = needed_letters.replace(c, '', 1)
+                        break  # Stop at first valid substitution for this word
+
         for word in remaining_words:
             word_lower = word.lower()
             word_letters = get_letters(word)
@@ -1678,8 +1662,9 @@ class CompoundWordplayAnalyzer:
 
             # Check indicators table FIRST for operation type
             # This takes priority over positional_words heuristic
+            # BUT skip if this word was flagged for retry as a synonym
             indicator_match = self.db.lookup_indicator(word)
-            if indicator_match:
+            if indicator_match and not (skip_indicator_words and word_lower in skip_indicator_words):
                 op_type = indicator_match.wordplay_type
                 if op_type in ('insertion', 'container', 'deletion', 'reversal',
                                'hidden'):
@@ -1869,10 +1854,20 @@ class CompoundWordplayAnalyzer:
                             word, 'insertion_material', word_letters, 'compound_analysis'
                         ))
                     else:
-                        additional_fodder.append((word, word_letters))
-                        word_roles.append(WordRole(
-                            word, 'fodder', word_letters, 'compound_analysis'
-                        ))
+                        # In charade context (no anagram), single letters are
+                        # direct contributions, not anagram fodder
+                        if not anagram_letters and len(word_letters) == 1:
+                            found_substitutions.append((word, SubstitutionMatch(
+                                word=word, letters=word_letters, category='single_letter'
+                            )))
+                            word_roles.append(WordRole(
+                                word, 'substitution', word_letters, 'database (single_letter)'
+                            ))
+                        else:
+                            additional_fodder.append((word, word_letters))
+                            word_roles.append(WordRole(
+                                word, 'fodder', word_letters, 'compound_analysis'
+                            ))
                     accounted_words.add(word_lower)
                     # Update needed_letters by removing the used letters
                     for c in word_letters:

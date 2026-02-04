@@ -433,26 +433,17 @@ def run_pipeline_probe(
 
         raw_candidates = def_result.get("candidates", []) or []
         flat_candidates = _length_filter(raw_candidates, enum)
-        
-        # NEW: Use known answer as single candidate if enabled
+
         # NEW: Use known answer as single candidate if enabled
         if USE_KNOWN_ANSWER:
             flat_candidates = [answer_raw]
             definition_answer_present = True
-            # Skip the normal candidate filtering - we know the answer
-            windows_with_hits = {w: [answer_raw] for w in
-                                 raw_windows[:1]} if raw_windows else {"?": [answer_raw]}
-            candidate_to_windows = {answer_raw: raw_windows[:1] if raw_windows else ["?"]}
         # ---- WINDOW → CANDIDATES (INVERTED SUPPORT) ----
         window_support: Dict[str, List[str]] = defaultdict(list)
         # All windows, including those with zero candidates
         window_candidates_by_window: Dict[str, List[str]] = {w: [] for w in raw_windows}
 
         for window in raw_windows:
-            # Skip window processing if using known answer
-            if USE_KNOWN_ANSWER:
-                break
-                
             window_key = clean_key(window)
 
             keys = [window_key]
@@ -463,7 +454,11 @@ def run_pipeline_probe(
                 if key not in graph:
                     continue
                 for cand in graph[key]:
-                    if cand in flat_candidates:
+                    if USE_KNOWN_ANSWER:
+                        match = norm_letters(cand) == answer
+                    else:
+                        match = cand in flat_candidates
+                    if match:
                         window_support[window].append(cand)
                         window_candidates_by_window[window].append(cand)
 
@@ -481,7 +476,7 @@ def run_pipeline_probe(
                     answer in {norm_letters(c) for c in flat_candidates}
             )
         # else: already set to True above
-        
+
         # Build candidate → windows mapping (inverse of window_support)
         candidate_to_windows = {}
         for window, cands in windows_with_hits.items():
@@ -490,7 +485,7 @@ def run_pipeline_probe(
                     candidate_to_windows[cand] = []
                 if window not in candidate_to_windows[cand]:
                     candidate_to_windows[cand].append(window)
-        
+
         definition_stage_records.append({
             'id': clue_id,
             'clue_text': clue,

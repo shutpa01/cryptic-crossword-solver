@@ -372,6 +372,51 @@ class GeneralWordplayAnalyzer:
                 definition_window
             )
 
+            # RETRY: If letters still needed and indicators were assigned,
+            # retry with those indicators skipped so they can be tried as synonyms
+            if (compound_solution and
+                compound_solution.get('letters_still_needed') and
+                compound_solution.get('operation_indicators')):
+
+                # Collect indicator words to skip
+                skip_words = set()
+                for ind_word, ind_type, ind_subtype in compound_solution['operation_indicators']:
+                    for w in ind_word.split():
+                        skip_words.add(w.lower())
+
+                # Rebuild word_roles and accounted_words from scratch (definition only)
+                word_roles_retry = []
+                accounted_retry = set()
+                if definition_window:
+                    for w in definition_window.split():
+                        for cw in clue_words:
+                            if cw.lower().strip('.,;:!?"\'') == w.lower().strip('.,;:!?"\''):
+                                word_roles_retry.append(WordRole(cw, 'definition', answer, 'pipeline'))
+                                accounted_retry.add(cw.lower())
+                                break
+
+                remaining_retry = [w for w in clue_words
+                                   if w.lower() not in accounted_retry]
+
+                retry_solution = self.compound_analyzer._analyze_remaining_words(
+                    remaining_retry,
+                    '',
+                    answer,
+                    word_roles_retry,
+                    accounted_retry,
+                    clue_words,
+                    definition_window,
+                    skip_indicator_words=skip_words
+                )
+
+                # Use retry if it resolved more letters
+                if (retry_solution and
+                    len(retry_solution.get('letters_still_needed', 'x' * 99)) <
+                    len(compound_solution.get('letters_still_needed', ''))):
+                    compound_solution = retry_solution
+                    word_roles = word_roles_retry
+                    accounted_words = accounted_retry
+
         explanation = self.explainer.build_explanation(
             record,
             word_roles,

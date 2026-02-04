@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31093
-Generated: 2026-02-03 05:02:43
+Generated: 2026-02-04 01:43:51
 Total clues: 32
 ================================================================================
 
@@ -8,13 +8,13 @@ SUMMARY
 ----------------------------------------
   Double definitions:       1
   Lurkers:                  0
-  Anagram/compound solved:  4
+  Anagram/compound solved:  3
   Anagram/compound partial: 0
-  General wordplay solved:  4
-  General wordplay partial: 23
+  General wordplay solved:  7
+  General wordplay partial: 21
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             9/32
+  TOTAL SOLVED:             11/32
 
 ================================================================================
 DOUBLE DEFINITIONS
@@ -30,7 +30,7 @@ ANAGRAM / COMPOUND WORDPLAY
 
   [SOLVED] CLUE: Teatime’s rearranged for judge (8)
   ANSWER: ESTIMATE|ESTIMATE
-  DEFINITION: (not found)
+  DEFINITION: judge
   FORMULA: anagram(TEATIME’S) = ESTIMATE
   BREAKDOWN:
     • "Teatime’s" = anagram fodder
@@ -40,7 +40,7 @@ ANAGRAM / COMPOUND WORDPLAY
 
   [SOLVED] CLUE: Blue marble is cracked on base (9)
   ANSWER: MISERABLE|MISERABLE
-  DEFINITION: (not found)
+  DEFINITION: Blue
   FORMULA: anagram(MARBLE + IS) + E (base) = MISERABLE
   BREAKDOWN:
     • "Blue" = definition for MISERABLE
@@ -49,20 +49,9 @@ ANAGRAM / COMPOUND WORDPLAY
     • "cracked" = anagram indicator
     • "base" = E (database (single_letter))
 
-  [SOLVED] CLUE: Fixed a page by cutting (9)
-  ANSWER: APPOINTED|APPOINTED
-  DEFINITION: (not found)
-  FORMULA: anagram(A) = APPOINTED
-  BREAKDOWN:
-    • "Fixed" = anagram indicator
-    • "a" = anagram fodder
-    • "page" = definition for APPOINTED
-    • "by" = definition for APPOINTED
-    • "cutting" = definition for APPOINTED
-
   [SOLVED] CLUE: Turning calmer? I wonder (7)
   ANSWER: MIRACLE|MIRACLE
-  DEFINITION: (not found)
+  DEFINITION: wonder
   FORMULA: anagram(CALMER? + I) = MIRACLE
   BREAKDOWN:
     • "Turning" = anagram indicator
@@ -76,7 +65,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [SOLVED] CLUE: Decorated sailor following the Spanish lecture (9)
   ANSWER: ELABORATE
-  DEFINITION: decorated
+  DEFINITION: Decorated
   FORMULA: AB (sailor) + ORATE (lecture) + EL (the spanish) = ELABORATE
   BREAKDOWN:
     "Decorated" = definition for ELABORATE
@@ -87,13 +76,13 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Met doctor as I shifted hospital’s shed (9)
   ANSWER: SATISFIED
-  DEFINITION: met
-  FORMULA: D (doctor) + AS + I + ? = SATISFIED
+  DEFINITION: Met
+  FORMULA: D (doctor) + I (I) + AS + ? = SATISFIED
   BREAKDOWN:
     "Met" = definition for SATISFIED
     "doctor" = D (database (single_letter))
     "as" = anagram fodder
-    "I" = anagram fodder
+    "I" = I (database (single_letter))
     "shed" = deletion indicator
     "shifted" = unresolved
     "hospital’s" = unresolved
@@ -111,7 +100,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Particular exercises by Charlie in period of inactivity (7)
   ANSWER: RESPECT
-  DEFINITION: particular
+  DEFINITION: Particular
   FORMULA: PER (by) + C (Charlie) + ? = RESPECT
   BREAKDOWN:
     "Particular" = definition for RESPECT
@@ -126,7 +115,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Before each run, recline and recuperate initially (7)
   ANSWER: EARLIER
-  DEFINITION: before
+  DEFINITION: Before
   FORMULA: ea (each) + R (run,) + LIE (recline) + ? = EARLIER
   BREAKDOWN:
     "Before" = definition for EARLIER
@@ -140,7 +129,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Creatures son found in socks (6)
   ANSWER: BEASTS
-  DEFINITION: creatures
+  DEFINITION: Creatures
   FORMULA: S (son) + BEAT (socks) + ? = BEASTS
   BREAKDOWN:
     "Creatures" = definition for BEASTS
@@ -149,23 +138,22 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "socks" = BEAT (database (synonym))
   LETTERS NEEDED: S
 
-  [PARTIAL] CLUE: Admitted what thespian did with mushroom inside (8)
+  [SOLVED] CLUE: Admitted what thespian did with mushroom inside (8)
   ANSWER: ACCEPTED
-  DEFINITION: admitted
-  FORMULA: ACTED (thespian) + ? = ACCEPTED
+  DEFINITION: Admitted
+  FORMULA: ACTED (thespian) + CEP (mushroom) = ACCEPTED
   BREAKDOWN:
     "Admitted" = definition for ACCEPTED
     "thespian" = ACTED (database (synonym))
+    "mushroom" = CEP (database (synonym))
     "inside" = hidden indicator
-    "what" = unresolved
-    "did" = unresolved
-    "with" = unresolved
-    "mushroom" = unresolved
-  LETTERS NEEDED: CPE
+    "what" = link word
+    "did" = link word
+    "with" = link word
 
   [PARTIAL] CLUE: Praise? Conservative gets embarrassed by it (6)
   ANSWER: CREDIT
-  DEFINITION: praise?
+  DEFINITION: Praise?
   FORMULA: C (Conservative) + IT + ? = CREDIT
   BREAKDOWN:
     "Praise?" = definition for CREDIT
@@ -179,9 +167,9 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [SOLVED] CLUE: A good artist is enthralled by obscure technical drawing (7)
   ANSWER: DIAGRAM
   DEFINITION: technical drawing
-  FORMULA: G (good) + RA (artist) + DIM (obscure) + A = DIAGRAM
+  FORMULA: A (A) + G (good) + RA (artist) + DIM (obscure) = DIAGRAM
   BREAKDOWN:
-    "A" = anagram fodder
+    "A" = A (database (single_letter))
     "good" = G (database (single_letter))
     "artist" = RA (database (abbreviation))
     "obscure" = DIM (database (synonym))
@@ -192,22 +180,22 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Give authority to European politician and leaders in Oslo will expect results (7)
   ANSWER: EMPOWER
-  DEFINITION: give authority to
-  FORMULA: E (European) + MP (politician) + ? = EMPOWER
+  DEFINITION: Give authority to
+  FORMULA: PER (in) + E (European) + ? = EMPOWER
   BREAKDOWN:
     "Give" = definition for EMPOWER
     "authority" = definition for EMPOWER
     "to" = definition for EMPOWER
     "European" = E (database (single_letter))
-    "politician" = MP (database (abbreviation))
-    "in" = hidden indicator
+    "in" = PER (database (synonym))
+    "politician" = unresolved
     "and" = unresolved
     "leaders" = unresolved
     "Oslo" = unresolved
     "will" = unresolved
     "expect" = unresolved
     "results" = unresolved
-  LETTERS NEEDED: OWER
+  LETTERS NEEDED: MOW
 
   [PARTIAL] CLUE: Greek’s sign of nerves after old group of soldiers retreated (5)
   ANSWER: ATTIC
@@ -241,18 +229,18 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Talked to lady bare, then put clothes on (9)
   ANSWER: ADDRESSED
-  DEFINITION: put clothes
-  FORMULA: ERE (to) + AS (on) + ? = ADDRESSED
+  DEFINITION: Talked to
+  FORMULA: SEED (put) + AS (on) + ? = ADDRESSED
   BREAKDOWN:
-    "to" = ERE (database (synonym))
+    "Talked" = definition for ADDRESSED
+    "to" = definition for ADDRESSED
     "bare," = deletion indicator
     "then" = positional indicator (construction order)
-    "put" = definition for ADDRESSED
-    "clothes" = definition for ADDRESSED
+    "put" = SEED (database (synonym))
+    "clothes" = deletion indicator
     "on" = AS (database (synonym))
-    "Talked" = unresolved
     "lady" = unresolved
-  LETTERS NEEDED: DDSD
+  LETTERS NEEDED: DRD
 
   [SOLVED] CLUE: Detainee finally let out, creating incident (5)
   ANSWER: EVENT
@@ -280,7 +268,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Diet regularly abandoned? Lock up pudding! (7)
   ANSWER: DESSERT
-  DEFINITION: pudding
+  DEFINITION: pudding!
   FORMULA: DESERT (abandoned?) + ? = DESSERT
   BREAKDOWN:
     "abandoned?" = DESERT (database (synonym))
@@ -305,7 +293,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Hearing car touching fence, not loudly (8)
   ANSWER: AUDIENCE
-  DEFINITION: hearing
+  DEFINITION: Hearing
   FORMULA: AUDI (car) + ? = AUDIENCE
   BREAKDOWN:
     "Hearing" = definition for AUDIENCE
@@ -318,7 +306,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: See lob – not the first tennis shot? (7)
   ANSWER: OBSERVE
-  DEFINITION: see
+  DEFINITION: See
   FORMULA: SO (not) + ? = OBSERVE
   BREAKDOWN:
     "See" = definition for OBSERVE
@@ -330,9 +318,20 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "shot?" = unresolved
   LETTERS NEEDED: BERVE
 
+  [SOLVED] CLUE: Fixed a page by cutting (9)
+  ANSWER: APPOINTED
+  DEFINITION: Fixed
+  FORMULA: POINTED (cutting) + A (a) + P (page) = APPOINTED
+  BREAKDOWN:
+    "Fixed" = definition for APPOINTED
+    "a" = A (database (single_letter))
+    "page" = P (database (single_letter))
+    "cutting" = POINTED (database (synonym))
+    "by" = link word
+
   [PARTIAL] CLUE: Mistake picked up in anger or resentment (5)
   ANSWER: ERROR
-  DEFINITION: mistake
+  DEFINITION: Mistake
   FORMULA: OR + ? = ERROR
   BREAKDOWN:
     "Mistake" = definition for ERROR
@@ -347,9 +346,9 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: A little time with paper and editor’s captivated (9)
   ANSWER: ATTRACTED
   DEFINITION: captivated
-  FORMULA: TRACE (little) + T (time) + A + ? = ATTRACTED
+  FORMULA: A (A) + TRACE (little) + T (time) + ? = ATTRACTED
   BREAKDOWN:
-    "A" = anagram fodder
+    "A" = A (database (single_letter))
     "little" = TRACE (database (synonym))
     "time" = T (database (single_letter))
     "captivated" = definition for ATTRACTED
@@ -384,7 +383,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [SOLVED] CLUE: Check concerning heartbeat (7)
   ANSWER: REPULSE
-  DEFINITION: check
+  DEFINITION: Check
   FORMULA: RE (concerning) + PULSE (heartbeat) = REPULSE
   BREAKDOWN:
     "Check" = definition for REPULSE
@@ -393,11 +392,11 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Indicate group of animals going round a lake (6)
   ANSWER: HERALD
-  DEFINITION: indicate
-  FORMULA: L (lake) + A + ? = HERALD
+  DEFINITION: Indicate
+  FORMULA: A (a) + L (lake) + ? = HERALD
   BREAKDOWN:
     "Indicate" = definition for HERALD
-    "a" = anagram fodder
+    "a" = A (database (single_letter))
     "lake" = L (database (single_letter))
     "group" = unresolved
     "of" = unresolved
@@ -417,17 +416,16 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "tot’s" = unresolved
   LETTERS NEEDED: DRMA
 
-  [PARTIAL] CLUE: Grimace from wife in church (5)
+  [SOLVED] CLUE: Grimace from wife in church (5)
   ANSWER: WINCE
-  DEFINITION: grimace
-  FORMULA: W (wife) + CE (church) + ? = WINCE
+  DEFINITION: Grimace
+  FORMULA: W (wife) + CE (church) + IN = WINCE
   BREAKDOWN:
     "Grimace" = definition for WINCE
-    "from" = hidden indicator
     "wife" = W (database (single_letter))
-    "in" = hidden indicator
+    "in" = anagram fodder
     "church" = CE (database (abbreviation))
-  LETTERS NEEDED: IN
+    "from" = link word
 
 ================================================================================
 END OF REPORT
