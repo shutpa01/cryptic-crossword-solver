@@ -291,22 +291,25 @@ class ExplanationBuilder:
                 continue
 
             # First check for phrase matches (current word + next word(s))
+            # Try longest phrases first for most specific match
             phrase_matched = False
-            if i < len(clue_words) - 1:
-                # Try two-word phrase
-                two_word_phrase = f"{word} {clue_words[i+1]}"
-                two_word_norm = norm_letters(two_word_phrase)
-                if two_word_norm in phrase_role_lookup:
-                    wr = phrase_role_lookup[two_word_norm]
-                    explained_words.add(two_word_norm)
+            max_phrase = min(len(clue_words) - i, 10)
+            for phrase_len in range(max_phrase, 1, -1):
+                phrase_words = clue_words[i:i + phrase_len]
+                phrase_text = ' '.join(phrase_words)
+                phrase_norm = norm_letters(phrase_text)
+                if phrase_norm in phrase_role_lookup:
+                    wr = phrase_role_lookup[phrase_norm]
+                    explained_words.add(phrase_norm)
                     
                     if wr.role == 'substitution':
-                        explanations.append(f'• "{two_word_phrase.lower()}" = {wr.contributes} ({wr.source})')
+                        explanations.append(f'• "{phrase_text.lower()}" = {wr.contributes} ({wr.source})')
                     else:
-                        explanations.append(f'• "{two_word_phrase.lower()}" = {wr.role}')
+                        explanations.append(f'• "{phrase_text.lower()}" = {wr.role}')
                     
-                    skip_next = 1  # Skip the next word
+                    skip_next = phrase_len - 1
                     phrase_matched = True
+                    break
             
             if phrase_matched:
                 continue

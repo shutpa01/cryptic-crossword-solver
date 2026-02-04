@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31093
-Generated: 2026-02-04 01:43:51
+Generated: 2026-02-04 07:45:22
 Total clues: 32
 ================================================================================
 
@@ -8,13 +8,13 @@ SUMMARY
 ----------------------------------------
   Double definitions:       1
   Lurkers:                  0
-  Anagram/compound solved:  3
+  Anagram/compound solved:  5
   Anagram/compound partial: 0
-  General wordplay solved:  7
-  General wordplay partial: 21
+  General wordplay solved:  10
+  General wordplay partial: 16
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             11/32
+  TOTAL SOLVED:             16/32
 
 ================================================================================
 DOUBLE DEFINITIONS
@@ -27,6 +27,19 @@ DOUBLE DEFINITIONS
 ================================================================================
 ANAGRAM / COMPOUND WORDPLAY
 ================================================================================
+
+  [SOLVED] CLUE: Met doctor as I shifted hospital’s shed (9)
+  ANSWER: SATISFIED|SATISFIED
+  DEFINITION: Met
+  FORMULA: anagram(AS + I + SHIFTED) - H (hospital’s) = SATISFIED
+  BREAKDOWN:
+    • "Met" = definition for SATISFIED
+    • "doctor" = anagram indicator
+    • "as" = anagram fodder
+    • "I" = anagram fodder
+    • "shifted" = anagram fodder
+    • "hospital’s" = H (to be removed)
+    • "shed" = deletion indicator
 
   [SOLVED] CLUE: Teatime’s rearranged for judge (8)
   ANSWER: ESTIMATE|ESTIMATE
@@ -59,6 +72,18 @@ ANAGRAM / COMPOUND WORDPLAY
     • "I" = anagram fodder
     • "wonder" = definition for MIRACLE
 
+  [SOLVED] CLUE: Indicate group of animals going round a lake (6)
+  ANSWER: HERALD|HERALD
+  DEFINITION: Indicate
+  FORMULA: anagram(A) + L (lake) + HERD (group of animals) = HERALD
+  BREAKDOWN:
+    • "Indicate" = definition for HERALD
+    • "group of animals" = HERD (database phrase (synonym))
+    • "going" = anagram indicator
+    • "a" = anagram fodder
+    • "lake" = L (database (single_letter))
+    • "round" = wordplay connector
+
 ================================================================================
 GENERAL WORDPLAY (NON-ANAGRAM)
 ================================================================================
@@ -74,20 +99,6 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "the spanish" = EL (database phrase (foreign_spanish))
     "lecture" = ORATE (database (synonym))
 
-  [PARTIAL] CLUE: Met doctor as I shifted hospital’s shed (9)
-  ANSWER: SATISFIED
-  DEFINITION: Met
-  FORMULA: D (doctor) + I (I) + AS + ? = SATISFIED
-  BREAKDOWN:
-    "Met" = definition for SATISFIED
-    "doctor" = D (database (single_letter))
-    "as" = anagram fodder
-    "I" = I (database (single_letter))
-    "shed" = deletion indicator
-    "shifted" = unresolved
-    "hospital’s" = unresolved
-  LETTERS NEEDED: TSFIE
-
   [PARTIAL] CLUE: First-rate police officer (5)
   ANSWER: SUPER
   DEFINITION: police officer
@@ -101,101 +112,99 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Particular exercises by Charlie in period of inactivity (7)
   ANSWER: RESPECT
   DEFINITION: Particular
-  FORMULA: PER (by) + C (Charlie) + ? = RESPECT
+  FORMULA: PE (exercises) + C (Charlie) + ? = RESPECT
   BREAKDOWN:
     "Particular" = definition for RESPECT
-    "by" = PER (database (synonym))
+    "exercises" = PE (database (substitution))
     "Charlie" = C (database (nato_phonetic))
     "in" = hidden indicator
-    "exercises" = unresolved
+    "by" = unresolved
     "period" = unresolved
     "of" = unresolved
     "inactivity" = unresolved
-  LETTERS NEEDED: SET
+  LETTERS NEEDED: RSET
 
-  [PARTIAL] CLUE: Before each run, recline and recuperate initially (7)
+  [SOLVED] CLUE: Before each run, recline and recuperate initially (7)
   ANSWER: EARLIER
   DEFINITION: Before
-  FORMULA: ea (each) + R (run,) + LIE (recline) + ? = EARLIER
+  FORMULA: ea (each) + R (run,) + LIE (recline) + R (recuperate) = EARLIER
   BREAKDOWN:
     "Before" = definition for EARLIER
     "each" = EA (database (double_letter))
     "run," = R (database (cricket))
     "recline" = LIE (database (synonym))
-    "initially" = positional indicator (construction order)
-    "and" = unresolved
-    "recuperate" = unresolved
-  LETTERS NEEDED: R
+    "recuperate" = R (first letter of)
+    "initially" = letter selector
+    "and" = link word
 
-  [PARTIAL] CLUE: Creatures son found in socks (6)
+  [SOLVED] CLUE: Creatures son found in socks (6)
   ANSWER: BEASTS
   DEFINITION: Creatures
-  FORMULA: S (son) + BEAT (socks) + ? = BEASTS
+  FORMULA: S (son) + BEATS (socks) (with insertion) = BEASTS
   BREAKDOWN:
     "Creatures" = definition for BEASTS
     "son" = S (database (single_letter))
     "found in" = insertion_indicator
-    "socks" = BEAT (database (synonym))
-  LETTERS NEEDED: S
+    "socks" = BEATS (database (synonym))
 
-  [SOLVED] CLUE: Admitted what thespian did with mushroom inside (8)
+  [PARTIAL] CLUE: Admitted what thespian did with mushroom inside (8)
   ANSWER: ACCEPTED
   DEFINITION: Admitted
-  FORMULA: ACTED (thespian) + CEP (mushroom) = ACCEPTED
+  FORMULA: CEP (mushroom) + ? = ACCEPTED
   BREAKDOWN:
     "Admitted" = definition for ACCEPTED
-    "thespian" = ACTED (database (synonym))
     "mushroom" = CEP (database (synonym))
     "inside" = hidden indicator
-    "what" = link word
-    "did" = link word
-    "with" = link word
+    "what" = unresolved
+    "thespian" = unresolved
+    "did" = unresolved
+    "with" = unresolved
+  LETTERS NEEDED: ACTED
 
-  [PARTIAL] CLUE: Praise? Conservative gets embarrassed by it (6)
+  [SOLVED] CLUE: Praise? Conservative gets embarrassed by it (6)
   ANSWER: CREDIT
   DEFINITION: Praise?
-  FORMULA: C (Conservative) + IT + ? = CREDIT
+  FORMULA: C (Conservative) + RED (embarrassed) + IT = CREDIT
   BREAKDOWN:
     "Praise?" = definition for CREDIT
     "Conservative" = C (database (single_letter))
+    "embarrassed" = RED (database (substitution))
     "it" = anagram fodder
-    "gets" = unresolved
-    "embarrassed" = unresolved
-    "by" = unresolved
-  LETTERS NEEDED: RED
+    "gets" = link word
+    "by" = link word
 
   [SOLVED] CLUE: A good artist is enthralled by obscure technical drawing (7)
   ANSWER: DIAGRAM
-  DEFINITION: technical drawing
+  DEFINITION: drawing
   FORMULA: A (A) + G (good) + RA (artist) + DIM (obscure) = DIAGRAM
   BREAKDOWN:
     "A" = A (database (single_letter))
     "good" = G (database (single_letter))
     "artist" = RA (database (abbreviation))
+    "enthralled" = container indicator
     "obscure" = DIM (database (synonym))
-    "technical" = definition for DIAGRAM
     "drawing" = definition for DIAGRAM
-    "enthralled" = wordplay connector
     "by" = link word
+    "technical" = wordplay connector
 
   [PARTIAL] CLUE: Give authority to European politician and leaders in Oslo will expect results (7)
   ANSWER: EMPOWER
   DEFINITION: Give authority to
-  FORMULA: PER (in) + E (European) + ? = EMPOWER
+  FORMULA: E (European) + MP (politician) + ? = EMPOWER
   BREAKDOWN:
     "Give" = definition for EMPOWER
     "authority" = definition for EMPOWER
     "to" = definition for EMPOWER
     "European" = E (database (single_letter))
-    "in" = PER (database (synonym))
-    "politician" = unresolved
+    "politician" = MP (database (abbreviation))
+    "in" = hidden indicator
     "and" = unresolved
     "leaders" = unresolved
     "Oslo" = unresolved
     "will" = unresolved
     "expect" = unresolved
     "results" = unresolved
-  LETTERS NEEDED: MOW
+  LETTERS NEEDED: OWER
 
   [PARTIAL] CLUE: Greek’s sign of nerves after old group of soldiers retreated (5)
   ANSWER: ATTIC
@@ -217,42 +226,43 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Children argue about new, difficult task (9)
   ANSWER: CHALLENGE
   DEFINITION: difficult task
-  FORMULA: C (about) + N (new,) + ? = CHALLENGE
+  FORMULA: CH (Children) + N (new,) + ? = CHALLENGE
   BREAKDOWN:
-    "about" = C (database (single_letter))
+    "Children" = CH (database (double_letter))
     "new," = N (database (single_letter))
     "difficult" = definition for CHALLENGE
     "task" = definition for CHALLENGE
-    "Children" = unresolved
     "argue" = unresolved
-  LETTERS NEEDED: HALLEGE
+    "about" = unresolved
+  LETTERS NEEDED: ALLEGE
 
   [PARTIAL] CLUE: Talked to lady bare, then put clothes on (9)
   ANSWER: ADDRESSED
   DEFINITION: Talked to
-  FORMULA: SEED (put) + AS (on) + ? = ADDRESSED
+  FORMULA: ? = ADDRESSED
   BREAKDOWN:
     "Talked" = definition for ADDRESSED
     "to" = definition for ADDRESSED
     "bare," = deletion indicator
     "then" = positional indicator (construction order)
-    "put" = SEED (database (synonym))
     "clothes" = deletion indicator
-    "on" = AS (database (synonym))
     "lady" = unresolved
-  LETTERS NEEDED: DRD
+    "put" = unresolved
+    "on" = unresolved
+  LETTERS NEEDED: ADDRESSED
 
-  [SOLVED] CLUE: Detainee finally let out, creating incident (5)
+  [PARTIAL] CLUE: Detainee finally let out, creating incident (5)
   ANSWER: EVENT
   DEFINITION: incident
-  FORMULA: T (let) + EVEN (out,) = EVENT
+  FORMULA: EVEN (out,) + ? = EVENT
   BREAKDOWN:
-    "finally" = letter selector
-    "let" = T (last letter of)
+    "finally" = positional indicator (construction order)
     "out," = EVEN (database (synonym))
     "incident" = definition for EVENT
-    "Detainee" = wordplay connector
-    "creating" = link word
+    "Detainee" = unresolved
+    "let" = unresolved
+    "creating" = unresolved
+  LETTERS NEEDED: T
 
   [PARTIAL] CLUE: Dad’s crossing the endless tracks (5)
   ANSWER: PATHS
@@ -269,26 +279,26 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Diet regularly abandoned? Lock up pudding! (7)
   ANSWER: DESSERT
   DEFINITION: pudding!
-  FORMULA: DESERT (abandoned?) + ? = DESSERT
+  FORMULA: ? = DESSERT
   BREAKDOWN:
-    "abandoned?" = DESERT (database (synonym))
     "up" = reversal indicator
     "pudding!" = definition for DESSERT
     "Diet" = unresolved
     "regularly" = unresolved
+    "abandoned?" = unresolved
     "Lock" = unresolved
-  LETTERS NEEDED: S
+  LETTERS NEEDED: DESSERT
 
   [PARTIAL] CLUE: Half upset about court orders (6)
   ANSWER: EDICTS
-  DEFINITION: court orders
+  DEFINITION: orders
   FORMULA: C (about) + SET (second half of upset) + ? = EDICTS
   BREAKDOWN:
     "Half" = deletion indicator
     "upset" = SET (second half of upset)
     "about" = C (database (single_letter))
-    "court" = definition for EDICTS
     "orders" = definition for EDICTS
+    "court" = unresolved
   LETTERS NEEDED: DI
 
   [PARTIAL] CLUE: Hearing car touching fence, not loudly (8)
@@ -307,16 +317,16 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: See lob – not the first tennis shot? (7)
   ANSWER: OBSERVE
   DEFINITION: See
-  FORMULA: SO (not) + ? = OBSERVE
+  FORMULA: ? = OBSERVE
   BREAKDOWN:
     "See" = definition for OBSERVE
-    "not" = SO (database (synonym))
     "first" = positional indicator (construction order)
     "lob" = unresolved
+    "not" = unresolved
     "the" = unresolved
     "tennis" = unresolved
     "shot?" = unresolved
-  LETTERS NEEDED: BERVE
+  LETTERS NEEDED: OBSERVE
 
   [SOLVED] CLUE: Fixed a page by cutting (9)
   ANSWER: APPOINTED
@@ -346,28 +356,26 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: A little time with paper and editor’s captivated (9)
   ANSWER: ATTRACTED
   DEFINITION: captivated
-  FORMULA: A (A) + TRACE (little) + T (time) + ? = ATTRACTED
+  FORMULA: A (A) + T (time) + TRACT (paper) + ? = ATTRACTED
   BREAKDOWN:
     "A" = A (database (single_letter))
-    "little" = TRACE (database (synonym))
     "time" = T (database (single_letter))
+    "paper" = TRACT (database (synonym))
     "captivated" = definition for ATTRACTED
+    "little" = unresolved
     "with" = unresolved
-    "paper" = unresolved
     "and" = unresolved
     "editor’s" = unresolved
-  LETTERS NEEDED: TD
+  LETTERS NEEDED: ED
 
-  [PARTIAL] CLUE: Fend off chap’s cleaner (9)
+  [SOLVED] CLUE: Fend off chap’s cleaner (9)
   ANSWER: DETERGENT
   DEFINITION: cleaner
-  FORMULA: GET (off) + ? = DETERGENT
+  FORMULA: GENT (chap’s) + DETER (fend off) = DETERGENT
   BREAKDOWN:
-    "off" = GET (database (synonym))
+    "fend off" = DETER (database phrase (synonym))
+    "chap’s" = GENT (database (synonym))
     "cleaner" = definition for DETERGENT
-    "Fend" = unresolved
-    "chap’s" = unresolved
-  LETTERS NEEDED: DERENT
 
   [PARTIAL] CLUE: Physicist, surrounded by reeling drunkards, suffers (8)
   ANSWER: STOMACHS
@@ -390,31 +398,15 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "concerning" = RE (database (abbreviation))
     "heartbeat" = PULSE (database (synonym))
 
-  [PARTIAL] CLUE: Indicate group of animals going round a lake (6)
-  ANSWER: HERALD
-  DEFINITION: Indicate
-  FORMULA: A (a) + L (lake) + ? = HERALD
-  BREAKDOWN:
-    "Indicate" = definition for HERALD
-    "a" = A (database (single_letter))
-    "lake" = L (database (single_letter))
-    "group" = unresolved
-    "of" = unresolved
-    "animals" = unresolved
-    "going" = unresolved
-    "round" = unresolved
-  LETTERS NEEDED: HERD
-
-  [PARTIAL] CLUE: Adult supporting tot’s play (5)
+  [SOLVED] CLUE: Adult supporting tot’s play (5)
   ANSWER: DRAMA
   DEFINITION: play
-  FORMULA: A (Adult) + ? = DRAMA
+  FORMULA: A (Adult) + DRAM (tot’s) = DRAMA
   BREAKDOWN:
     "Adult" = A (database (single_letter))
+    "tot’s" = DRAM (database (synonym))
     "play" = definition for DRAMA
-    "supporting" = unresolved
-    "tot’s" = unresolved
-  LETTERS NEEDED: DRMA
+    "supporting" = wordplay connector
 
   [SOLVED] CLUE: Grimace from wife in church (5)
   ANSWER: WINCE

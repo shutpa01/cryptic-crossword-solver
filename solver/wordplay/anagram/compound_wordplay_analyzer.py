@@ -227,10 +227,10 @@ class DatabaseLookup:
         self._substitution_cache[word_clean] = matches
         return matches
 
-    def lookup_phrase_substitution(self, phrase: str) -> List[SubstitutionMatch]:
-        """Look up a multi-word phrase in the wordplay table for substitutions.
+    def lookup_phrase_substitution(self, phrase: str, max_synonym_length: int = 8) -> List[SubstitutionMatch]:
+        """Look up a multi-word phrase in the wordplay table and synonyms_pairs for substitutions.
 
-        Handles phrases like "the french" -> LA, "the german" -> DER, etc.
+        Handles phrases like "the french" -> LA, "group of animals" -> HERD, etc.
 
         Args:
             phrase: A multi-word phrase (e.g., "the french")
@@ -250,6 +250,7 @@ class DatabaseLookup:
         conn = self._get_connection()
         cursor = conn.cursor()
 
+        # First check wordplay table
         cursor.execute("""
             SELECT indicator, substitution, category, notes
             FROM wordplay
@@ -267,6 +268,24 @@ class DatabaseLookup:
             )
             for r in results
         ]
+
+        # Also check synonyms_pairs for short synonyms
+        cursor.execute("""
+            SELECT synonym FROM synonyms_pairs
+            WHERE LOWER(word) = ? AND LENGTH(synonym) <= ?
+        """, (phrase_clean, max_synonym_length))
+
+        synonym_results = cursor.fetchall()
+
+        for r in synonym_results:
+            synonym = r[0]
+            if not any(m.letters.upper() == synonym.upper() for m in matches):
+                matches.append(SubstitutionMatch(
+                    word=phrase_clean,
+                    letters=synonym.upper(),
+                    category='synonym',
+                    notes='from synonyms_pairs'
+                ))
 
         self._substitution_cache[phrase_clean] = matches
         return matches
@@ -1268,7 +1287,7 @@ class CompoundWordplayAnalyzer:
                 VALUES (?, ?, ?, ?)
             """, (word_clean, wordplay_type, 'inferred', 'low'))
             conn.commit()
-            print(f"  [INFERRED] Added '{word_clean}' as {wordplay_type} indicator")
+
         except Exception as e:
             pass  # Silently fail - don't break analysis
 
@@ -1648,6 +1667,18 @@ class CompoundWordplayAnalyzer:
                             needed_letters = needed_letters.replace(c, '', 1)
                         break  # Stop at first valid substitution for this word
 
+        # Pre-check: does this clue contain container/insertion indicators?
+        # Used to decide whether substitutions must be contiguous in answer.
+        # In charade clues (no container/insertion), each piece must be a
+        # contiguous substring. Container/insertion clues legitimately split words.
+        has_container_insertion = bool(insertion_indicators_in_remaining)
+        if not has_container_insertion:
+            for w in remaining_words:
+                ind = self.db.lookup_indicator(w)
+                if ind and ind.wordplay_type in ('insertion', 'container'):
+                    has_container_insertion = True
+                    break
+
         for word in remaining_words:
             word_lower = word.lower()
             word_letters = get_letters(word)
@@ -1675,21 +1706,14 @@ class CompoundWordplayAnalyzer:
                     accounted_words.add(word_lower)
                     continue
 
-                # Handle single-word parts indicators (like "initially", "finally", "almost")
-                # Also handle acrostic indicators with initial/final subtypes
-                elif op_type == 'parts' or (
-                        op_type == 'acrostic' and indicator_match.subtype in ('initial',
-                                                                              'final')):
+                # Handle single-word parts/acrostic indicators (like "initially", "finally", "almost")
+                # Acrostics are initial-letter by definition, no subtype required
+                elif op_type in ('parts', 'acrostic'):
                     subtype = indicator_match.subtype or ''
-                    print(
-                        f"DEBUG acrostic: Found indicator '{word}' type={op_type} subtype='{subtype}'")
-                    print(f"DEBUG acrostic: remaining_words = {remaining_words}")
-                    print(f"DEBUG acrostic: needed_letters = {needed_letters}")
                     # Find adjacent word in remaining_words to operate on
                     # Check both next AND previous word
                     try:
                         current_idx = remaining_words.index(word)
-                        print(f"DEBUG acrostic: current_idx = {current_idx}")
                         source_word = None
                         source_letters = None
 
@@ -1697,18 +1721,12 @@ class CompoundWordplayAnalyzer:
                         if current_idx + 1 < len(remaining_words):
                             source_word = remaining_words[current_idx + 1]
                             source_letters = get_letters(source_word)
-                            print(
-                                f"DEBUG acrostic: Found next word: {source_word} -> {source_letters}")
 
                         # If no next word, try previous word
                         if source_word is None and current_idx > 0:
                             source_word = remaining_words[current_idx - 1]
                             source_letters = get_letters(source_word)
-                            print(
-                                f"DEBUG acrostic: Found previous word: {source_word} -> {source_letters}")
 
-                        print(
-                            f"DEBUG acrostic: source_word={source_word}, source_letters={source_letters}")
                         if source_word and source_letters:
 
                             # Check if this is a DELETE operation (remove letter, use rest as fodder)
@@ -1769,7 +1787,8 @@ class CompoundWordplayAnalyzer:
                                 extracted_letter = None
 
                                 if (
-                                        'first' in subtype.lower() or subtype.lower() == 'initial') and source_letters:
+                                        'first' in subtype.lower() or subtype.lower() == 'initial'
+                                        or op_type == 'acrostic') and source_letters:
                                     extracted_letter = source_letters[0]
                                 elif (
                                         'last' in subtype.lower() or subtype.lower() == 'final') and source_letters:
@@ -1944,6 +1963,11 @@ class CompoundWordplayAnalyzer:
                         can_use = False
                         break
                 if can_use:
+                    # In charade clues (no container/insertion), reject substitutions
+                    # whose letters are scattered in the answer (e.g., GET in DETERGENT).
+                    # Each charade piece must be a contiguous substring of the answer.
+                    if not has_container_insertion and len(sub_letters) > 1 and sub_letters not in answer_upper:
+                        continue
                     found_substitutions.append((word, sub))
                     word_roles.append(WordRole(
                         word, 'substitution', sub_letters,
@@ -1987,46 +2011,47 @@ class CompoundWordplayAnalyzer:
 
                     break  # Stop at first valid substitution for this word
 
-        # Check for TWO-WORD phrase substitutions (e.g., "the french" -> LA)
-        # This must come after single-word checks to avoid duplicate processing
+        # Check for MULTI-WORD phrase substitutions (e.g., "the french" -> LA,
+        # "group of animals" -> HERD). Tries all contiguous phrases up to 10 words.
+        # This must come after single-word checks to avoid duplicate processing.
         if needed_letters:
-            for i in range(len(remaining_words) - 1):
-                word1 = remaining_words[i]
-                word2 = remaining_words[i + 1]
-                word1_lower = word1.lower()
-                word2_lower = word2.lower()
+            max_phrase_len = min(len(remaining_words), 10)
+            for phrase_len in range(2, max_phrase_len + 1):
+                for i in range(len(remaining_words) - phrase_len + 1):
+                    phrase_words = remaining_words[i:i + phrase_len]
+                    phrase_words_lower = [w.lower() for w in phrase_words]
 
-                # Skip if either word already accounted for
-                if word1_lower in accounted_words or word2_lower in accounted_words:
-                    continue
+                    # Skip if any word already accounted for
+                    if any(w in accounted_words for w in phrase_words_lower):
+                        continue
 
-                # Build the phrase and look it up
-                phrase = f"{word1_lower} {word2_lower}"
-                phrase_subs = self.db.lookup_phrase_substitution(phrase)
+                    # Build the phrase and look it up
+                    phrase = ' '.join(phrase_words_lower)
+                    phrase_subs = self.db.lookup_phrase_substitution(phrase)
 
-                for sub in phrase_subs:
-                    sub_letters = sub.letters.upper()
-                    temp_needed = list(needed_letters)
-                    can_use = True
-                    for c in sub_letters:
-                        if c in temp_needed:
-                            temp_needed.remove(c)
-                        else:
-                            can_use = False
-                            break
-                    if can_use:
-                        # Found a valid phrase substitution!
-                        found_substitutions.append((phrase, sub))
-                        word_roles.append(WordRole(
-                            phrase, 'substitution', sub_letters,
-                            f'database phrase ({sub.category})'
-                        ))
-                        accounted_words.add(word1_lower)
-                        accounted_words.add(word2_lower)
-                        # Update needed letters
+                    for sub in phrase_subs:
+                        sub_letters = sub.letters.upper()
+                        temp_needed = list(needed_letters)
+                        can_use = True
                         for c in sub_letters:
-                            needed_letters = needed_letters.replace(c, '', 1)
-                        break  # Stop at first valid substitution for this phrase
+                            if c in temp_needed:
+                                temp_needed.remove(c)
+                            else:
+                                can_use = False
+                                break
+                        if can_use:
+                            # Found a valid phrase substitution!
+                            found_substitutions.append((phrase, sub))
+                            word_roles.append(WordRole(
+                                phrase, 'substitution', sub_letters,
+                                f'database phrase ({sub.category})'
+                            ))
+                            for w in phrase_words_lower:
+                                accounted_words.add(w)
+                            # Update needed letters
+                            for c in sub_letters:
+                                needed_letters = needed_letters.replace(c, '', 1)
+                            break  # Stop at first valid substitution for this phrase
 
         # Build compound solution
         # Collect unresolved words for self-learning
@@ -2156,6 +2181,17 @@ class CompoundWordplayAnalyzer:
                     unresolved_words = [w for w in unresolved_words
                                         if norm_letters(w) != norm_letters(unres_word)]
                     break  # Only process one deletion source
+
+        # Reorder needed_letters to match their position in the answer.
+        # replace(c,'',1) removes letters left-to-right which can jumble
+        # the remainder (e.g. DRAMA minus A gives DRMA instead of DRAM).
+        # Restore answer ordering so partial results are human-readable.
+        if needed_letters and len(needed_letters) <= len(answer_upper):
+            for start in range(len(answer_upper) - len(needed_letters) + 1):
+                substr = answer_upper[start:start + len(needed_letters)]
+                if sorted(substr) == sorted(needed_letters):
+                    needed_letters = substr
+                    break
 
         solution = {
             'needed_letters_original': answer_upper,

@@ -409,13 +409,20 @@ class GeneralWordplayAnalyzer:
                     skip_indicator_words=skip_words
                 )
 
-                # Use retry if it resolved more letters
-                if (retry_solution and
-                    len(retry_solution.get('letters_still_needed', 'x' * 99)) <
-                    len(compound_solution.get('letters_still_needed', ''))):
-                    compound_solution = retry_solution
-                    word_roles = word_roles_retry
-                    accounted_words = accounted_retry
+                # Use retry if it either fully resolves all letters, or
+                # accounts for more clue words (fewer unresolved). More words
+                # explained = more genuine cryptic mechanisms found, even if
+                # fewer answer letters are matched (greedy synonyms can inflate
+                # letter counts without being correct).
+                if retry_solution:
+                    retry_unresolved = len(retry_solution.get('unresolved_words', []))
+                    pass1_unresolved = len(compound_solution.get('unresolved_words', []))
+                    retry_fully_resolved = not retry_solution.get('letters_still_needed')
+
+                    if retry_fully_resolved or retry_unresolved < pass1_unresolved:
+                        compound_solution = retry_solution
+                        word_roles = word_roles_retry
+                        accounted_words = accounted_retry
 
         explanation = self.explainer.build_explanation(
             record,

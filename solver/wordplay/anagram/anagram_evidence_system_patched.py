@@ -1185,19 +1185,21 @@ class ComprehensiveWordplayDetector:
                                 compound_evidence_type = "compound"
                                 compound_confidence = 0.95  # High confidence for complete compound
                                 # Massive bonus for complete compound evidence
-                                evidence_score += 75
+                                #evidence_score += 75
                                 
                                 if debug:
                                     print(f"           ★★ COMPLETE COMPOUND EVIDENCE! New score: {evidence_score:.2f}")
                             elif len(letters_still_needed) < len(remaining_letters):
                                 # Partial compound - some letters explained
-                                evidence_score += 25
+                                #evidence_score += 25
                                 compound_confidence = (len(candidate_letters) - len(letters_still_needed)) / len(candidate_letters)
 
-                    if debug and i < 10:
-                        enum_status = "✅" if enumeration_bonus > 0 else "❌" if enumeration_bonus < 0 else "?"
-                        print(
-                            f"           → Score: {evidence_score:.2f} ({enum_status} enum={enumeration_bonus}, letters={explained_letters}/{total_letters}, words={len(fodder.words)}, confidence={confidence:.2f})")
+                    #if debug and i < 10:
+                     #   enum_status = "✅" if enumeration_bonus > 0 else "❌" if
+                        #   enumeration_bonus < 0 else "?"
+                     #   print(
+                     #       f"           → Score: {evidence_score:.2f} ({enum_status}
+                    #       enum={enumeration_bonus}, letters={explained_letters}/{total_letters}, words={len(fodder.words)}, confidence={confidence:.2f})")
 
                     # NOW compare with full compound-enhanced score
                     if evidence_score > best_score:
@@ -1219,12 +1221,14 @@ class ComprehensiveWordplayDetector:
                             best_evidence.compound_substitutions = compound_subs
                         best_score = evidence_score
 
-                        if debug:
-                            print(
-                                f"           ★ NEW BEST {'COMPOUND' if compound_evidence_type == 'compound' else 'PARTIAL'} EVIDENCE! Score: {best_score:.2f}")
+                        #if debug:
+                         #   print(
+                           #     f"           ★ NEW BEST
+                        #     {'COMPOUND' if compound_evidence_type == 'compound' else 'PARTIAL'} EVIDENCE! Score: {best_score:.2f}")
 
             # Also test for deletion anagrams (≤2 excess letters)
             if indicators.get('anagram'):
+
                 can_delete, excess = self.can_form_by_deletion_strict(candidate_letters,
                                                                       fodder_letters)
                 if can_delete:
@@ -1235,7 +1239,7 @@ class ComprehensiveWordplayDetector:
                     # Calculate score for deletion evidence
                     # All letters are explained but we have excess, so penalize
                     deletion_explained = len(candidate_letters)
-                    excess_penalty = len(excess) * 10  # Penalty per excess letter
+                    excess_penalty = len(excess) * 0  # Penalty per excess letter
                     
                     # Check enumeration match
                     deletion_enum_bonus = 0
@@ -1252,6 +1256,8 @@ class ComprehensiveWordplayDetector:
                     
                     # Only use deletion evidence if better than current best
                     if deletion_score > best_score:
+                        print(
+                            f"DEBUG DELETION WINS: score={deletion_score} > best={best_score}")
                         # Calculate complete word attribution
                         indicator_words = list(fodder.indicator.words)
                         fodder_word_set = set(w.lower() for w in fodder.words)
@@ -1286,6 +1292,7 @@ class ComprehensiveWordplayDetector:
                             unused_clue_words=remaining_words  # Backward compatibility
                         )
                         best_score = deletion_score
+
                         
                         if debug:
                             print(f"           ★ NEW BEST DELETION EVIDENCE! Score: {best_score:.2f}")
@@ -1593,7 +1600,7 @@ class ComprehensiveWordplayDetector:
             # Use test_anagram_evidence which supports deletion variants
             evidence = self.test_anagram_evidence(
                 candidate_upper, clue_text, indicators,
-                enumeration=enumeration_str, debug=False
+                enumeration=enumeration_str, debug=True
             )
 
             if evidence:
