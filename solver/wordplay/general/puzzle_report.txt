@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31093
-Generated: 2026-02-05 00:40:34
+Generated: 2026-02-05 03:58:10
 Total clues: 32
 ================================================================================
 
@@ -10,11 +10,11 @@ SUMMARY
   Lurkers:                  0
   Anagram/compound solved:  3
   Anagram/compound partial: 0
-  General wordplay solved:  12
-  General wordplay partial: 16
+  General wordplay solved:  15
+  General wordplay partial: 13
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             16/32
+  TOTAL SOLVED:             19/32
 
 ================================================================================
 DOUBLE DEFINITIONS
@@ -89,20 +89,19 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "First-rate" = unresolved
   LETTERS NEEDED: SUPER
 
-  [PARTIAL] CLUE: Particular exercises by Charlie in period of inactivity (7)
+  [SOLVED] CLUE: Particular exercises by Charlie in period of inactivity (7)
   ANSWER: RESPECT
   DEFINITION: Particular
-  FORMULA: PE (exercises) + C (Charlie) + ? = RESPECT
+  FORMULA: PE (exercises) + C (Charlie) + REST (period of inactivity) = RESPECT
   BREAKDOWN:
     "Particular" = definition for RESPECT
     "exercises" = PE (database (substitution))
     "Charlie" = C (database (nato_phonetic))
     "in" = hidden indicator
-    "by" = unresolved
-    "period" = unresolved
-    "of" = unresolved
-    "inactivity" = unresolved
-  LETTERS NEEDED: RSET
+    "by" = link word
+    "period" = wordplay connector
+    "of" = link word
+    "inactivity" = wordplay connector
 
   [SOLVED] CLUE: Before each run, recline and recuperate initially (7)
   ANSWER: EARLIER
@@ -187,9 +186,8 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "to" = definition for EMPOWER
     "European" = E (database (single_letter))
     "politician" = MP (database (abbreviation))
-    "in" = hidden indicator
+    "leaders in" = acrostic_indicator
     "and" = unresolved
-    "leaders" = unresolved
     "Oslo" = unresolved
     "will" = unresolved
     "expect" = unresolved
@@ -201,14 +199,12 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   DEFINITION: greek
   FORMULA: ? = ATTIC
   BREAKDOWN:
+    "sign of" = parts_indicator
     "after" = positional indicator (construction order)
     "Greek’s" = unresolved
-    "sign" = unresolved
-    "of" = unresolved
     "nerves" = unresolved
     "old" = unresolved
     "group" = unresolved
-    "of" = unresolved
     "soldiers" = unresolved
     "retreated" = unresolved
   LETTERS NEEDED: ATTIC
@@ -281,14 +277,14 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [PARTIAL] CLUE: Half upset about court orders (6)
   ANSWER: EDICTS
-  DEFINITION: orders
+  DEFINITION: court orders
   FORMULA: C (about) + SET (second half of upset) + ? = EDICTS
   BREAKDOWN:
     "Half" = deletion indicator
     "upset" = SET (second half of upset)
     "about" = C (database (single_letter))
+    "court" = definition for EDICTS
     "orders" = definition for EDICTS
-    "court" = unresolved
   LETTERS NEEDED: DI
 
   [PARTIAL] CLUE: Hearing car touching fence, not loudly (8)
@@ -304,19 +300,17 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "loudly" = unresolved
   LETTERS NEEDED: ENCE
 
-  [PARTIAL] CLUE: See lob – not the first tennis shot? (7)
+  [SOLVED] CLUE: See lob – not the first tennis shot? (7)
   ANSWER: OBSERVE
   DEFINITION: See
-  FORMULA: ? = OBSERVE
+  FORMULA: SERVE (tennis shot?) + OB (minus first letter of lob) = OBSERVE
   BREAKDOWN:
     "See" = definition for OBSERVE
-    "first" = positional indicator (construction order)
-    "lob" = unresolved
-    "not" = unresolved
-    "the" = unresolved
-    "tennis" = unresolved
-    "shot?" = unresolved
-  LETTERS NEEDED: OBSERVE
+    "lob" = OB (minus first letter of lob)
+    "tennis shot?" = SERVE (database phrase (synonym))
+    "not" = link word
+    "the" = link word
+    "first" = wordplay connector
 
   [SOLVED] CLUE: Fixed a page by cutting (9)
   ANSWER: APPOINTED
@@ -346,17 +340,16 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: A little time with paper and editor’s captivated (9)
   ANSWER: ATTRACTED
   DEFINITION: captivated
-  FORMULA: A (A) + T (time) + TRACT (paper) + ? = ATTRACTED
+  FORMULA: TRACT (paper) + TAD (a little) + ? = ATTRACTED
   BREAKDOWN:
-    "A" = A (database (single_letter))
-    "time" = T (database (single_letter))
+    "a little" = TAD (database phrase (synonym))
     "paper" = TRACT (database (synonym))
     "captivated" = definition for ATTRACTED
-    "little" = unresolved
+    "time" = unresolved
     "with" = unresolved
     "and" = unresolved
     "editor’s" = unresolved
-  LETTERS NEEDED: ED
+  LETTERS NEEDED: E
 
   [SOLVED] CLUE: Fend off chap’s cleaner (9)
   ANSWER: DETERGENT
@@ -367,17 +360,16 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "chap’s" = GENT (database (synonym))
     "cleaner" = definition for DETERGENT
 
-  [PARTIAL] CLUE: Physicist, surrounded by reeling drunkards, suffers (8)
+  [SOLVED] CLUE: Physicist, surrounded by reeling drunkards, suffers (8)
   ANSWER: STOMACHS
   DEFINITION: suffers
-  FORMULA: OHM (Physicist,) + ? = STOMACHS
+  FORMULA: MACH (Physicist,) + SOTS (drunkards,) (with insertion) = STOMACHS
   BREAKDOWN:
-    "Physicist," = OHM (database (synonym))
+    "Physicist," = MACH (database (synonym))
     "surrounded by" = insertion_indicator
+    "drunkards," = SOTS (database (synonym))
     "suffers" = definition for STOMACHS
-    "reeling" = unresolved
-    "drunkards," = unresolved
-  LETTERS NEEDED: STACS
+    "reeling" = wordplay connector
 
   [SOLVED] CLUE: Turning calmer? I wonder (7)
   ANSWER: 

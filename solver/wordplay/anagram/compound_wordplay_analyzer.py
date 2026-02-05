@@ -238,7 +238,8 @@ class DatabaseLookup:
         Returns:
             List of SubstitutionMatch objects for any matches found
         """
-        phrase_clean = phrase.lower().strip()
+        phrase_clean = ' '.join(
+            ''.join(c for c in word if c.isalpha()) for word in phrase.lower().split())
 
         if not phrase_clean:
             return []
@@ -1398,15 +1399,24 @@ class CompoundWordplayAnalyzer:
                                  accounted_words: Set[str],
                                  clue_words: List[str],
                                  definition_window: Optional[str],
-                                 skip_indicator_words: Optional[Set[str]] = None) -> Optional[
+                                 skip_indicator_words: Optional[Set[str]] = None,
+                                 skip_substitutions: Optional[Set[Tuple[str, str]]] = None,
+                                 _backtrack_depth: int = 0) -> Optional[
         Dict[str, Any]]:
         """
         Analyze remaining words by querying the database.
         Identifies substitutions and construction operations.
         Handles both ADDITIONS (answer > anagram) and DELETIONS (anagram > answer).
+        
+        skip_substitutions: Set of (word, letters) tuples to skip during substitution lookup.
+        _backtrack_depth: Internal counter to prevent infinite recursion in backtracking.
         """
         answer_upper = answer.upper().replace(' ', '')
         anagram_upper = anagram_letters.upper()
+
+        # Save original state for backtracking (before any modifications)
+        original_word_roles = list(word_roles)
+        original_accounted_words = set(accounted_words)
 
         # Calculate what letters we still need (for additions)
         needed_letters = ''
@@ -1715,6 +1725,37 @@ class CompoundWordplayAnalyzer:
                     has_container_insertion = True
                     break
 
+        # Check for MULTI-WORD indicators (2-5 words) of ANY type
+        # Try longest phrases first so "not the first" matches before "not" alone
+        # This generalizes the two-word insertion/container check above
+        for phrase_len in range(min(5, len(remaining_words)), 1, -1):
+            for i in range(len(remaining_words) - phrase_len + 1):
+                phrase_words = remaining_words[i:i + phrase_len]
+                # Filter out pure-punctuation tokens (e.g., en-dash '–')
+                alpha_words = [w for w in phrase_words if norm_letters(w)]
+                if len(alpha_words) < 2:
+                    continue
+                # Skip if any meaningful word already claimed by another multi-word indicator
+                if any(w.lower() in words_used_by_two_word_indicators for w in alpha_words):
+                    continue
+                phrase = ' '.join(norm_letters(w) for w in alpha_words)
+                indicator_match = self.db.lookup_indicator(phrase)
+                if indicator_match:
+                    op_type = indicator_match.wordplay_type
+                    # Add to operation_indicators for all relevant types
+                    if op_type in ('insertion', 'container', 'deletion', 'reversal', 'hidden', 'parts', 'acrostic'):
+                        phrase_display = ' '.join(alpha_words)
+                        operation_indicators.append((phrase_display, indicator_match))
+                        word_roles.append(WordRole(
+                            phrase_display, f'{op_type}_indicator', '', 'database'
+                        ))
+                        for w in phrase_words:
+                            accounted_words.add(w.lower())
+                            words_used_by_two_word_indicators.add(w.lower())
+                        # Update container/insertion flag if needed
+                        if op_type in ('insertion', 'container'):
+                            has_container_insertion = True
+
         for word in remaining_words:
             word_lower = word.lower()
             word_letters = get_letters(word)
@@ -2004,6 +2045,9 @@ class CompoundWordplayAnalyzer:
                     # Each charade piece must be a contiguous substring of the answer.
                     if not has_container_insertion and len(sub_letters) > 1 and sub_letters not in answer_upper:
                         continue
+                    # Skip if this substitution is in the exclusion set (backtracking)
+                    if skip_substitutions and (word_lower, sub_letters) in skip_substitutions:
+                        continue
                     found_substitutions.append((word, sub))
                     word_roles.append(WordRole(
                         word, 'substitution', sub_letters,
@@ -2149,10 +2193,14 @@ class CompoundWordplayAnalyzer:
             # Find positions of deletion indicators in clue
             deletion_ind_positions = {}
             for del_word, del_ind in deletion_indicators_found:
-                for idx, cw in enumerate(clue_words):
-                    if norm_letters(cw) == norm_letters(del_word):
-                        deletion_ind_positions[idx] = (del_word, del_ind)
-                        break
+                # For multi-word indicators, find position of first word in clue
+                first_word = del_word.split()[0]
+                first_word_norm = norm_letters(first_word)
+                if first_word_norm:
+                    for idx, cw in enumerate(clue_words):
+                        if norm_letters(cw) == first_word_norm:
+                            deletion_ind_positions[idx] = (del_word, del_ind)
+                            break
 
             for unres_word in list(unresolved_words):  # Copy list since we modify it
                 unres_lower = unres_word.lower()
@@ -2280,7 +2328,8 @@ class CompoundWordplayAnalyzer:
             'positional_indicators': positional_indicators,
             'letters_still_needed': needed_letters,
             'unresolved_words': unresolved_words,
-            'fully_resolved': len(needed_letters) == 0
+            'fully_resolved': len(needed_letters) == 0,
+            'word_roles': list(word_roles)  # Include for backtracking sync
         }
 
         # Try to solve the compound construction
@@ -2306,6 +2355,43 @@ class CompoundWordplayAnalyzer:
                         'parts': [anagram_letters, sub_letters],
                         'result': answer
                     }
+
+        # BACKTRACKING: If not fully resolved and we have substitutions, try alternatives
+        if not solution['fully_resolved'] and found_substitutions and _backtrack_depth == 0:
+            best_solution = solution
+            best_letters_needed = len(solution['letters_still_needed'])
+            
+            for word, sub in found_substitutions:
+                # Try excluding this substitution
+                exclude_set = skip_substitutions.copy() if skip_substitutions else set()
+                exclude_set.add((word.lower(), sub.letters.upper()))
+                
+                # Re-run with this substitution excluded, using ORIGINAL state
+                retry_solution = self._analyze_remaining_words(
+                    remaining_words, anagram_letters, answer,
+                    list(original_word_roles),  # Original state
+                    set(original_accounted_words),  # Original state
+                    clue_words, definition_window,
+                    skip_indicator_words, exclude_set,
+                    _backtrack_depth=1  # Prevent further recursion
+                )
+                
+                if retry_solution:
+                    retry_letters = len(retry_solution.get('letters_still_needed', ''))
+                    if retry_solution.get('fully_resolved'):
+                        # Found a complete solution - sync caller's word_roles and return
+                        word_roles.clear()
+                        word_roles.extend(retry_solution.get('word_roles', []))
+                        return retry_solution
+                    elif retry_letters < best_letters_needed:
+                        # Better partial solution
+                        best_solution = retry_solution
+                        best_letters_needed = retry_letters
+            
+            solution = best_solution
+            # Sync caller's word_roles with the chosen solution
+            word_roles.clear()
+            word_roles.extend(solution.get('word_roles', []))
 
         return solution
 
