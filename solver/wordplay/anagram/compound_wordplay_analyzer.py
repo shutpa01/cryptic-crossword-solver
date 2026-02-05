@@ -536,168 +536,196 @@ class CompoundWordplayAnalyzer:
         if exact_match:
             # Brute force found exact match - use this data directly
             likely_answer = exact_match.get('answer', '').upper().replace(' ', '')
-            fodder_words = exact_match.get('fodder_words', [])
-            fodder_letters = exact_match.get('fodder_letters', '')
+            fodder_words_original = exact_match.get('fodder_words', [])
+            fodder_letters_original = exact_match.get('fodder_letters', '')
 
-            # Get definition from pipeline data
-            definition_window = self._get_definition_window(case, clue_words)
+            # Get ALL valid definition windows and try each
+            all_windows = self._get_all_valid_definition_windows(case, clue_words)
+            if not all_windows:
+                all_windows = [None]  # Try with no definition window as fallback
 
-            # Find anagram indicator using our method (not evidence garbage)
-            anagram_indicator = self._find_anagram_indicator(
-                clue_words, fodder_words, definition_window
-            )
+            best_result = None
+            best_score = -1  # Higher is better
 
-            # Check if any fodder words should be reassigned as insertion material
-            # (e.g., "Me" in "Me sporting tailored sateen" should be insertion, not fodder)
-            insertion_material = []
-            if fodder_words and anagram_indicator:
-                fodder_words, insertion_material = self._reassign_fodder_near_insertion_indicators(
-                    fodder_words, clue_words, anagram_indicator
+            for definition_window in all_windows:
+                # Reset fodder for each attempt
+                fodder_words = list(fodder_words_original)
+                fodder_letters = fodder_letters_original
+
+                # Find anagram indicator using our method (not evidence garbage)
+                anagram_indicator = self._find_anagram_indicator(
+                    clue_words, fodder_words, definition_window
                 )
-                # Recalculate fodder_letters if we removed any words
-                if insertion_material:
-                    fodder_letters = ''.join(
-                        c.upper() for w in fodder_words for c in w if c.isalpha()
+
+                # Check if any fodder words should be reassigned as insertion material
+                # (e.g., "Me" in "Me sporting tailored sateen" should be insertion, not fodder)
+                insertion_material = []
+                if fodder_words and anagram_indicator:
+                    fodder_words, insertion_material = self._reassign_fodder_near_insertion_indicators(
+                        fodder_words, clue_words, anagram_indicator
+                    )
+                    # Recalculate fodder_letters if we removed any words
+                    if insertion_material:
+                        fodder_letters = ''.join(
+                            c.upper() for w in fodder_words for c in w if c.isalpha()
+                        )
+
+                # Build word roles for exact match
+                word_roles = []
+                accounted_words = set()
+
+                # Account for indicator first - add each word separately for breakdown lookup
+                if anagram_indicator:
+                    for ind_word in anagram_indicator.split():
+                        word_roles.append(
+                            WordRole(ind_word, 'anagram_indicator', '', 'database'))
+                        accounted_words.add(ind_word.lower())
+
+                # Fodder words
+                for w in fodder_words:
+                    word_roles.append(
+                        WordRole(w, 'fodder', fodder_letters.upper(), 'brute_force'))
+                    accounted_words.add(w.lower())
+
+                # Definition words
+                if definition_window:
+                    for w in definition_window.split():
+                        if w.lower() not in accounted_words:
+                            word_roles.append(
+                                WordRole(w, 'definition', likely_answer, 'pipeline'))
+                            accounted_words.add(w.lower())
+
+                # Find remaining words for compound analysis
+                # Use norm_letters to handle punctuation (e.g., "Yes," vs "yes")
+                accounted_normalized = {norm_letters(a) for a in accounted_words}
+                remaining_words = [w for w in clue_words if
+                                   norm_letters(w) not in accounted_normalized]
+
+                # Do compound analysis if there are remaining words (especially insertion material)
+                compound_solution = None
+                if remaining_words:
+                    compound_solution = self._analyze_remaining_words(
+                        remaining_words, fodder_letters, likely_answer, word_roles,
+                        accounted_words, clue_words, definition_window
                     )
 
-            # Build word roles for exact match
-            word_roles = []
-            accounted_words = set()
+                # Check if indicator reassignment is needed (orphaned substitution case)
+                if compound_solution and anagram_indicator:
+                    unresolved = compound_solution.get('unresolved_words', [])
+                    reassignment = self._check_indicator_reassignment_needed(
+                        anagram_indicator, compound_solution, unresolved,
+                        fodder_words, definition_window
+                    )
 
-            # Account for indicator first - add each word separately for breakdown lookup
-            if anagram_indicator:
-                for ind_word in anagram_indicator.split():
-                    word_roles.append(
-                        WordRole(ind_word, 'anagram_indicator', '', 'database'))
-                    accounted_words.add(ind_word.lower())
+                    if reassignment:
+                        new_anagram_indicator, operation_type = reassignment
 
-            # Fodder words
-            for w in fodder_words:
-                word_roles.append(
-                    WordRole(w, 'fodder', fodder_letters.upper(), 'brute_force'))
-                accounted_words.add(w.lower())
+                        # Update word_roles: change old anagram indicator to operation indicator
+                        for wr in word_roles:
+                            if wr.word.lower() == anagram_indicator.lower() and wr.role == 'anagram_indicator':
+                                wr.role = 'operation_indicator'
+                                wr.source = f'database ({operation_type})'
+                                break
 
-            # Definition words
-            if definition_window:
-                for w in definition_window.split():
-                    if w.lower() not in accounted_words:
-                        word_roles.append(
-                            WordRole(w, 'definition', likely_answer, 'pipeline'))
-                        accounted_words.add(w.lower())
+                        # Add new anagram indicator to word_roles
+                        word_roles.append(WordRole(
+                            new_anagram_indicator, 'anagram_indicator', '',
+                            'database (reassigned)'
+                        ))
+                        accounted_words.add(new_anagram_indicator.lower())
 
-            # Find remaining words for compound analysis
-            # Use norm_letters to handle punctuation (e.g., "Yes," vs "yes")
-            accounted_normalized = {norm_letters(a) for a in accounted_words}
-            remaining_words = [w for w in clue_words if
-                               norm_letters(w) not in accounted_normalized]
+                        # Update anagram_indicator for explanation
+                        old_indicator = anagram_indicator
+                        anagram_indicator = new_anagram_indicator
 
-            # Do compound analysis if there are remaining words (especially insertion material)
-            compound_solution = None
-            if remaining_words:
-                compound_solution = self._analyze_remaining_words(
-                    remaining_words, fodder_letters, likely_answer, word_roles,
-                    accounted_words, clue_words, definition_window
+                        # Update compound_solution with operation indicator
+                        compound_solution['operation_indicators'] = [
+                            (old_indicator, operation_type, '')
+                        ]
+                        compound_solution['unresolved_words'] = [
+                            w for w in unresolved
+                            if norm_letters(w) != norm_letters(new_anagram_indicator)
+                        ]
+
+                # Build explanation
+                from solver.wordplay.anagram.explanation_builder import ExplanationBuilder
+                explainer = ExplanationBuilder()
+                explanation = explainer.build_explanation(
+                    case, word_roles, fodder_words, fodder_letters,
+                    anagram_indicator, definition_window, compound_solution, clue_words,
+                    likely_answer
                 )
 
-            # Check if indicator reassignment is needed (orphaned substitution case)
-            if compound_solution and anagram_indicator:
-                unresolved = compound_solution.get('unresolved_words', [])
-                reassignment = self._check_indicator_reassignment_needed(
-                    anagram_indicator, compound_solution, unresolved,
-                    fodder_words, definition_window
+                # Check if all words are accounted for (pure anagram, no compound needed)
+                # Use norm_letters to handle punctuation (e.g., "Yes," vs "yes")
+                accounted_normalized = {norm_letters(a) for a in accounted_words}
+                remaining_unresolved = [w for w in clue_words if
+                                        norm_letters(w) not in accounted_normalized]
+
+                # If no compound_solution but all words accounted for, mark as fully resolved
+                if compound_solution is None and not remaining_unresolved:
+                    compound_solution = {
+                        'fully_resolved': True,
+                        'operation': 'pure_anagram'
+                    }
+                elif compound_solution is None:
+                    compound_solution = {
+                        'fully_resolved': False,
+                        'unresolved_words': remaining_unresolved
+                    }
+
+                # Mark partial anagrams as 2 (stays in anagram cohort, not forwarded to general)
+                # Values: 0 = no anagram, 1 = fully resolved, 2 = partial anagram
+                # Check if anagram stage already validated this as a partial anagram
+                anagrams = case.get('anagrams', [])
+                is_validated_partial = any(
+                    hit.get('solve_type') == 'anagram_evidence_partial'
+                    for hit in anagrams
                 )
+                if compound_solution and is_validated_partial:
+                    if compound_solution.get('letters_still_needed'):
+                        compound_solution['fully_resolved'] = 2
 
-                if reassignment:
-                    new_anagram_indicator, operation_type = reassignment
+                    # Format answers with spaces for multi-word enumerations
+                    enumeration = case.get('enumeration', '')
+                    likely_answer_formatted = format_answer_with_enumeration(likely_answer,
+                                                                             enumeration)
+                    db_answer_formatted = format_answer_with_enumeration(db_answer, enumeration)
 
-                    # Update word_roles: change old anagram indicator to operation indicator
-                    for wr in word_roles:
-                        if wr.word.lower() == anagram_indicator.lower() and wr.role == 'anagram_indicator':
-                            wr.role = 'operation_indicator'
-                            wr.source = f'database ({operation_type})'
-                            break
-
-                    # Add new anagram indicator to word_roles
-                    word_roles.append(WordRole(
-                        new_anagram_indicator, 'anagram_indicator', '',
-                        'database (reassigned)'
-                    ))
-                    accounted_words.add(new_anagram_indicator.lower())
-
-                    # Update anagram_indicator for explanation
-                    old_indicator = anagram_indicator
-                    anagram_indicator = new_anagram_indicator
-
-                    # Update compound_solution with operation indicator
-                    compound_solution['operation_indicators'] = [
-                        (old_indicator, operation_type, '')
-                    ]
-                    compound_solution['unresolved_words'] = [
-                        w for w in unresolved
-                        if norm_letters(w) != norm_letters(new_anagram_indicator)
-                    ]
-
-            # Build explanation
-            from solver.wordplay.anagram.explanation_builder import ExplanationBuilder
-            explainer = ExplanationBuilder()
-            explanation = explainer.build_explanation(
-                case, word_roles, fodder_words, fodder_letters,
-                anagram_indicator, definition_window, compound_solution, clue_words,
-                likely_answer
-            )
-
-            # Check if all words are accounted for (pure anagram, no compound needed)
-            # Use norm_letters to handle punctuation (e.g., "Yes," vs "yes")
-            accounted_normalized = {norm_letters(a) for a in accounted_words}
-            remaining_unresolved = [w for w in clue_words if
-                                    norm_letters(w) not in accounted_normalized]
-
-            # If no compound_solution but all words accounted for, mark as fully resolved
-            if compound_solution is None and not remaining_unresolved:
-                compound_solution = {
-                    'fully_resolved': True,
-                    'operation': 'pure_anagram'
-                }
-            elif compound_solution is None:
-                compound_solution = {
-                    'fully_resolved': False,
-                    'unresolved_words': remaining_unresolved
+                result = {
+                    'clue': clue_text,
+                    'likely_answer': likely_answer_formatted,
+                    'db_answer': db_answer_formatted,
+                    'answer_matches': norm_letters(likely_answer) == norm_letters(db_answer),
+                    'word_roles': word_roles,
+                    'definition_window': definition_window,
+                    'anagram_component': {
+                        'fodder_words': fodder_words,
+                        'fodder_letters': fodder_letters,
+                        'indicator': anagram_indicator
+                    },
+                    'compound_solution': compound_solution,
+                    'explanation': explanation,
+                    'remaining_unresolved': remaining_unresolved
                 }
 
-            # Mark partial anagrams as 2 (stays in anagram cohort, not forwarded to general)
-            # Values: 0 = no anagram, 1 = fully resolved, 2 = partial anagram
-            # Check if anagram stage already validated this as a partial anagram
-            anagrams = case.get('anagrams', [])
-            is_validated_partial = any(
-                hit.get('solve_type') == 'anagram_evidence_partial'
-                for hit in anagrams
-            )
-            if compound_solution and is_validated_partial:
-                if compound_solution.get('letters_still_needed'):
-                    compound_solution['fully_resolved'] = 2
+                # Score this result: fully_resolved=1 is best, then fewer letters_still_needed
+                fully_resolved = compound_solution.get('fully_resolved', False) if compound_solution else False
+                if fully_resolved == 1 or fully_resolved is True:
+                    # Perfect - return immediately
+                    return result
 
-            # Format answers with spaces for multi-word enumerations
-            enumeration = case.get('enumeration', '')
-            likely_answer_formatted = format_answer_with_enumeration(likely_answer,
-                                                                     enumeration)
-            db_answer_formatted = format_answer_with_enumeration(db_answer, enumeration)
+                # Calculate score for partial results (lower letters_still_needed is better)
+                letters_needed = len(compound_solution.get('letters_still_needed', '')) if compound_solution else 999
+                score = 100 - letters_needed  # Higher score = fewer letters needed
 
-            return {
-                'clue': clue_text,
-                'likely_answer': likely_answer_formatted,
-                'db_answer': db_answer_formatted,
-                'answer_matches': norm_letters(likely_answer) == norm_letters(db_answer),
-                'word_roles': word_roles,
-                'definition_window': definition_window,
-                'anagram_component': {
-                    'fodder_words': fodder_words,
-                    'fodder_letters': fodder_letters,
-                    'indicator': anagram_indicator
-                },
-                'compound_solution': compound_solution,
-                'explanation': explanation,
-                'remaining_unresolved': remaining_unresolved
-            }
+                if score > best_score:
+                    best_score = score
+                    best_result = result
+
+            # End of window loop - return best result found
+            if best_result:
+                return best_result
 
             # SURGICAL FIX: Reconstruct fodder_words from word_roles if empty
             if not fodder_words and word_roles:
@@ -1293,27 +1321,35 @@ class CompoundWordplayAnalyzer:
 
     def _get_definition_window(self, case: Dict[str, Any],
                                clue_words: List[str]) -> Optional[str]:
-        """Extract definition window from pipeline data."""
+        """Extract definition window from pipeline data (returns first match for backward compat)."""
+        windows = self._get_all_valid_definition_windows(case, clue_words)
+        return windows[0] if windows else None
+
+    def _get_all_valid_definition_windows(self, case: Dict[str, Any],
+                                          clue_words: List[str]) -> List[str]:
+        """Extract ALL valid definition windows from pipeline data."""
         window_support = case.get('window_support', {})
-        answer = case.get('answer', '').upper()
+        answer = case.get('answer', '').upper().replace(' ', '')
+        valid_windows = []
 
         if window_support:
             for window_text, candidates in window_support.items():
                 if isinstance(candidates, list):
                     normalized = [c.upper().replace(' ', '') for c in candidates]
-                    if answer.replace(' ', '') in normalized:
-                        return window_text
+                    if answer in normalized:
+                        valid_windows.append(window_text)
 
         # Fallback: use definition from case if available
-        if case.get('definition'):
-            return case.get('definition')
+        if not valid_windows and case.get('definition'):
+            valid_windows.append(case.get('definition'))
 
         # NEW FALLBACK: Query definition_answers_augmented table
-        definition = self._find_definition_from_db(answer, clue_words)
-        if definition:
-            return definition
+        if not valid_windows:
+            definition = self._find_definition_from_db(answer, clue_words)
+            if definition:
+                valid_windows.append(definition)
 
-        return None
+        return valid_windows
 
     def _find_definition_from_db(self, answer: str, clue_words: List[str]) -> Optional[
         str]:
@@ -1667,6 +1703,18 @@ class CompoundWordplayAnalyzer:
                             needed_letters = needed_letters.replace(c, '', 1)
                         break  # Stop at first valid substitution for this word
 
+        # Pre-check: does this clue contain container/insertion indicators?
+        # Used to decide whether substitutions must be contiguous in answer.
+        # In charade clues (no container/insertion), each piece must be a
+        # contiguous substring. Container/insertion clues legitimately split words.
+        has_container_insertion = bool(insertion_indicators_in_remaining)
+        if not has_container_insertion:
+            for w in remaining_words:
+                ind = self.db.lookup_indicator(w)
+                if ind and ind.wordplay_type in ('insertion', 'container'):
+                    has_container_insertion = True
+                    break
+
         for word in remaining_words:
             word_lower = word.lower()
             word_letters = get_letters(word)
@@ -1951,6 +1999,11 @@ class CompoundWordplayAnalyzer:
                         can_use = False
                         break
                 if can_use:
+                    # In charade clues (no container/insertion), reject substitutions
+                    # whose letters are scattered in the answer (e.g., GET in DETERGENT).
+                    # Each charade piece must be a contiguous substring of the answer.
+                    if not has_container_insertion and len(sub_letters) > 1 and sub_letters not in answer_upper:
+                        continue
                     found_substitutions.append((word, sub))
                     word_roles.append(WordRole(
                         word, 'substitution', sub_letters,

@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31093
-Generated: 2026-02-04 20:52:04
+Generated: 2026-02-05 00:40:34
 Total clues: 32
 ================================================================================
 
@@ -8,13 +8,13 @@ SUMMARY
 ----------------------------------------
   Double definitions:       1
   Lurkers:                  0
-  Anagram/compound solved:  4
+  Anagram/compound solved:  3
   Anagram/compound partial: 0
-  General wordplay solved:  10
-  General wordplay partial: 17
+  General wordplay solved:  12
+  General wordplay partial: 16
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             15/32
+  TOTAL SOLVED:             16/32
 
 ================================================================================
 DOUBLE DEFINITIONS
@@ -41,25 +41,16 @@ ANAGRAM / COMPOUND WORDPLAY
     • "hospital’s" = H (to be removed)
     • "shed" = deletion indicator
 
-  [SOLVED] CLUE: Teatime’s rearranged for judge (8)
-  ANSWER: ESTIMATE|ESTIMATE
-  DEFINITION: judge
-  FORMULA: anagram(TEATIME’S) = ESTIMATE
+  [SOLVED] CLUE: Blue marble is cracked on base (9)
+  ANSWER: MISERABLE|MISERABLE
+  DEFINITION: Blue
+  FORMULA: anagram(MARBLE + IS) + E (base) = MISERABLE
   BREAKDOWN:
-    • "Teatime’s" = anagram fodder
-    • "rearranged" = anagram indicator
-    • "judge" = definition for ESTIMATE
-    • "for" = link word
-
-  [SOLVED] CLUE: Turning calmer? I wonder (7)
-  ANSWER: MIRACLE|MIRACLE
-  DEFINITION: wonder
-  FORMULA: anagram(CALMER? + I) = MIRACLE
-  BREAKDOWN:
-    • "Turning" = anagram indicator
-    • "calmer?" = anagram fodder
-    • "I" = anagram fodder
-    • "wonder" = definition for MIRACLE
+    • "Blue" = definition for MISERABLE
+    • "marble" = anagram fodder
+    • "is" = anagram fodder
+    • "cracked" = anagram indicator
+    • "base" = E (database (single_letter))
 
   [SOLVED] CLUE: Indicate group of animals going round a lake (6)
   ANSWER: HERALD|HERALD
@@ -136,18 +127,29 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "found in" = insertion_indicator
     "socks" = BEATS (database (synonym))
 
-  [SOLVED] CLUE: Admitted what thespian did with mushroom inside (8)
+  [PARTIAL] CLUE: Admitted what thespian did with mushroom inside (8)
   ANSWER: ACCEPTED
   DEFINITION: Admitted
-  FORMULA: ACTED (thespian) + CEP (mushroom) = ACCEPTED
+  FORMULA: CEP (mushroom) + ? = ACCEPTED
   BREAKDOWN:
     "Admitted" = definition for ACCEPTED
-    "thespian" = ACTED (database (synonym))
     "mushroom" = CEP (database (synonym))
     "inside" = hidden indicator
-    "what" = link word
-    "did" = link word
-    "with" = link word
+    "what" = unresolved
+    "thespian" = unresolved
+    "did" = unresolved
+    "with" = unresolved
+  LETTERS NEEDED: ACTED
+
+  [SOLVED] CLUE: Teatime’s rearranged for judge (8)
+  ANSWER: 
+  DEFINITION: (not found)
+  FORMULA: ? = 
+  BREAKDOWN:
+    "rearranged" = anagram indicator
+    "Teatime’s" = unresolved
+    "for" = unresolved
+    "judge" = unresolved
 
   [SOLVED] CLUE: Praise? Conservative gets embarrassed by it (6)
   ANSWER: CREDIT
@@ -227,17 +229,17 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Talked to lady bare, then put clothes on (9)
   ANSWER: ADDRESSED
   DEFINITION: Talked to
-  FORMULA: SEED (put) + AS (on) + ? = ADDRESSED
+  FORMULA: ? = ADDRESSED
   BREAKDOWN:
     "Talked" = definition for ADDRESSED
     "to" = definition for ADDRESSED
     "bare," = deletion indicator
     "then" = positional indicator (construction order)
-    "put" = SEED (database (synonym))
     "clothes" = deletion indicator
-    "on" = AS (database (synonym))
     "lady" = unresolved
-  LETTERS NEEDED: DDR
+    "put" = unresolved
+    "on" = unresolved
+  LETTERS NEEDED: ADDRESSED
 
   [PARTIAL] CLUE: Detainee finally let out, creating incident (5)
   ANSWER: EVENT
@@ -251,19 +253,6 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "let" = unresolved
     "creating" = unresolved
   LETTERS NEEDED: T
-
-  [PARTIAL] CLUE: Blue marble is cracked on base (9)
-  ANSWER: MISERABLE
-  DEFINITION: base
-  FORMULA: SEA (Blue) + LIE (is) + ? = MISERABLE
-  BREAKDOWN:
-    "Blue" = SEA (database (synonym))
-    "is" = LIE (database (synonym))
-    "base" = definition for MISERABLE
-    "marble" = unresolved
-    "cracked" = unresolved
-    "on" = unresolved
-  LETTERS NEEDED: MRB
 
   [PARTIAL] CLUE: Dad’s crossing the endless tracks (5)
   ANSWER: PATHS
@@ -280,26 +269,26 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Diet regularly abandoned? Lock up pudding! (7)
   ANSWER: DESSERT
   DEFINITION: pudding!
-  FORMULA: DESERT (abandoned?) + ? = DESSERT
+  FORMULA: ? = DESSERT
   BREAKDOWN:
-    "abandoned?" = DESERT (database (synonym))
     "up" = reversal indicator
     "pudding!" = definition for DESSERT
     "Diet" = unresolved
     "regularly" = unresolved
+    "abandoned?" = unresolved
     "Lock" = unresolved
-  LETTERS NEEDED: S
+  LETTERS NEEDED: DESSERT
 
   [PARTIAL] CLUE: Half upset about court orders (6)
   ANSWER: EDICTS
-  DEFINITION: court orders
+  DEFINITION: orders
   FORMULA: C (about) + SET (second half of upset) + ? = EDICTS
   BREAKDOWN:
     "Half" = deletion indicator
     "upset" = SET (second half of upset)
     "about" = C (database (single_letter))
-    "court" = definition for EDICTS
     "orders" = definition for EDICTS
+    "court" = unresolved
   LETTERS NEEDED: DI
 
   [PARTIAL] CLUE: Hearing car touching fence, not loudly (8)
@@ -318,16 +307,16 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: See lob – not the first tennis shot? (7)
   ANSWER: OBSERVE
   DEFINITION: See
-  FORMULA: SO (not) + ? = OBSERVE
+  FORMULA: ? = OBSERVE
   BREAKDOWN:
     "See" = definition for OBSERVE
-    "not" = SO (database (synonym))
     "first" = positional indicator (construction order)
     "lob" = unresolved
+    "not" = unresolved
     "the" = unresolved
     "tennis" = unresolved
     "shot?" = unresolved
-  LETTERS NEEDED: BERVE
+  LETTERS NEEDED: OBSERVE
 
   [SOLVED] CLUE: Fixed a page by cutting (9)
   ANSWER: APPOINTED
@@ -357,27 +346,26 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: A little time with paper and editor’s captivated (9)
   ANSWER: ATTRACTED
   DEFINITION: captivated
-  FORMULA: A (A) + TRACE (little) + T (time) + ? = ATTRACTED
+  FORMULA: A (A) + T (time) + TRACT (paper) + ? = ATTRACTED
   BREAKDOWN:
     "A" = A (database (single_letter))
-    "little" = TRACE (database (synonym))
     "time" = T (database (single_letter))
+    "paper" = TRACT (database (synonym))
     "captivated" = definition for ATTRACTED
+    "little" = unresolved
     "with" = unresolved
-    "paper" = unresolved
     "and" = unresolved
     "editor’s" = unresolved
-  LETTERS NEEDED: TD
+  LETTERS NEEDED: ED
 
-  [PARTIAL] CLUE: Fend off chap’s cleaner (9)
+  [SOLVED] CLUE: Fend off chap’s cleaner (9)
   ANSWER: DETERGENT
   DEFINITION: cleaner
-  FORMULA: DETER (fend off) + ? = DETERGENT
+  FORMULA: GENT (chap’s) + DETER (fend off) = DETERGENT
   BREAKDOWN:
     "fend off" = DETER (database phrase (synonym))
+    "chap’s" = GENT (database (synonym))
     "cleaner" = definition for DETERGENT
-    "chap’s" = unresolved
-  LETTERS NEEDED: GENT
 
   [PARTIAL] CLUE: Physicist, surrounded by reeling drunkards, suffers (8)
   ANSWER: STOMACHS
@@ -390,6 +378,15 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "reeling" = unresolved
     "drunkards," = unresolved
   LETTERS NEEDED: STACS
+
+  [SOLVED] CLUE: Turning calmer? I wonder (7)
+  ANSWER: 
+  DEFINITION: (not found)
+  FORMULA: ? = 
+  BREAKDOWN:
+    "Turning" = anagram indicator
+    "calmer?" = unresolved
+    "wonder" = unresolved
 
   [SOLVED] CLUE: Check concerning heartbeat (7)
   ANSWER: REPULSE
