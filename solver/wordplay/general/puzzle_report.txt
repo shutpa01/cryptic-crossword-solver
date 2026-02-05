@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31093
-Generated: 2026-02-05 03:58:10
+Generated: 2026-02-05 05:13:03
 Total clues: 32
 ================================================================================
 
@@ -8,13 +8,13 @@ SUMMARY
 ----------------------------------------
   Double definitions:       1
   Lurkers:                  0
-  Anagram/compound solved:  3
+  Anagram/compound solved:  2
   Anagram/compound partial: 0
-  General wordplay solved:  15
-  General wordplay partial: 13
+  General wordplay solved:  17
+  General wordplay partial: 12
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             19/32
+  TOTAL SOLVED:             20/32
 
 ================================================================================
 DOUBLE DEFINITIONS
@@ -40,17 +40,6 @@ ANAGRAM / COMPOUND WORDPLAY
     • "shifted" = anagram fodder
     • "hospital’s" = H (to be removed)
     • "shed" = deletion indicator
-
-  [SOLVED] CLUE: Blue marble is cracked on base (9)
-  ANSWER: MISERABLE|MISERABLE
-  DEFINITION: Blue
-  FORMULA: anagram(MARBLE + IS) + E (base) = MISERABLE
-  BREAKDOWN:
-    • "Blue" = definition for MISERABLE
-    • "marble" = anagram fodder
-    • "is" = anagram fodder
-    • "cracked" = anagram indicator
-    • "base" = E (database (single_letter))
 
   [SOLVED] CLUE: Indicate group of animals going round a lake (6)
   ANSWER: HERALD|HERALD
@@ -164,7 +153,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [SOLVED] CLUE: A good artist is enthralled by obscure technical drawing (7)
   ANSWER: DIAGRAM
-  DEFINITION: drawing
+  DEFINITION: technical drawing
   FORMULA: A (A) + G (good) + RA (artist) + DIM (obscure) = DIAGRAM
   BREAKDOWN:
     "A" = A (database (single_letter))
@@ -172,14 +161,14 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "artist" = RA (database (abbreviation))
     "enthralled" = container indicator
     "obscure" = DIM (database (synonym))
+    "technical" = definition for DIAGRAM
     "drawing" = definition for DIAGRAM
     "by" = link word
-    "technical" = wordplay connector
 
-  [PARTIAL] CLUE: Give authority to European politician and leaders in Oslo will expect results (7)
+  [SOLVED] CLUE: Give authority to European politician and leaders in Oslo will expect results (7)
   ANSWER: EMPOWER
   DEFINITION: Give authority to
-  FORMULA: E (European) + MP (politician) + ? = EMPOWER
+  FORMULA: OWER (Oslo will expect results) + E (European) + MP (politician) = EMPOWER
   BREAKDOWN:
     "Give" = definition for EMPOWER
     "authority" = definition for EMPOWER
@@ -187,12 +176,11 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "European" = E (database (single_letter))
     "politician" = MP (database (abbreviation))
     "leaders in" = acrostic_indicator
-    "and" = unresolved
-    "Oslo" = unresolved
-    "will" = unresolved
-    "expect" = unresolved
-    "results" = unresolved
-  LETTERS NEEDED: OWER
+    "Oslo" = O (first letter of)
+    "will" = W (first letter of)
+    "expect" = E (first letter of)
+    "results" = R (first letter of)
+    "and" = link word
 
   [PARTIAL] CLUE: Greek’s sign of nerves after old group of soldiers retreated (5)
   ANSWER: ATTIC
@@ -249,6 +237,18 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "let" = unresolved
     "creating" = unresolved
   LETTERS NEEDED: T
+
+  [SOLVED] CLUE: Blue marble is cracked on base (9)
+  ANSWER: MISERABLE
+  DEFINITION: base
+  FORMULA: MISERABLE (Blue) = MISERABLE
+  BREAKDOWN:
+    "Blue" = MISERABLE (database (synonym))
+    "base" = definition for MISERABLE
+    "marble" = wordplay connector
+    "is" = link word
+    "cracked" = wordplay connector
+    "on" = link word
 
   [PARTIAL] CLUE: Dad’s crossing the endless tracks (5)
   ANSWER: PATHS

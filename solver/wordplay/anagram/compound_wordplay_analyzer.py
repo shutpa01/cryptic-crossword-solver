@@ -1529,16 +1529,53 @@ class CompoundWordplayAnalyzer:
             if indicator_match and indicator_match.wordplay_type in ('parts', 'acrostic'):
                 subtype = indicator_match.subtype or ''
 
-                # Find the source word (word adjacent to the indicator that provides the letter)
-                # Look for the word that comes after the two-word indicator
+                # ACROSTIC: Extract first letter from EACH subsequent word
+                # "leaders in Oslo will expect results" -> O+W+E+R
+                if indicator_match.wordplay_type == 'acrostic' or (
+                        'initial' in subtype.lower() or 'first' in subtype.lower()):
+                    acrostic_letters = ''
+                    acrostic_sources = []
+                    for j in range(i + 2, len(remaining_words)):
+                        src = remaining_words[j]
+                        src_letters = get_letters(src)
+                        if not src_letters:
+                            continue
+                        first_char = src_letters[0].upper()
+                        if first_char in needed_letters:
+                            # Verify this specific letter is still needed
+                            temp = needed_letters
+                            for c in acrostic_letters + first_char:
+                                temp = temp.replace(c, '', 1)
+                            if len(temp) < len(needed_letters) - len(acrostic_letters):
+                                acrostic_letters += first_char
+                                acrostic_sources.append(src)
+                        else:
+                            break  # Stop at first word that doesn't contribute
+
+                    if len(acrostic_letters) >= 2:
+                        # Mark indicator
+                        ind_display = f"{word} {remaining_words[i + 1]}"
+                        parts_found.append({
+                            'indicator': ind_display,
+                            'indicator_words': [word, remaining_words[i + 1]],
+                            'source_word': ' '.join(acrostic_sources),
+                            'extracted_letter': acrostic_letters,
+                            'subtype': subtype,
+                            'is_delete': False
+                        })
+                        words_used_by_parts.update(
+                            [word.lower(), remaining_words[i + 1].lower()] +
+                            [s.lower() for s in acrostic_sources])
+                        # Update needed letters
+                        for c in acrostic_letters:
+                            needed_letters = needed_letters.replace(c, '', 1)
+                        continue  # Skip the single-word source handling below
+
+                # NON-ACROSTIC: Find single source word (original behavior)
                 source_word = None
                 source_idx = None
-
                 if i + 2 < len(remaining_words):
                     source_word = remaining_words[i + 2]
-                    source_idx = i + 2
-
-                if source_word:
                     source_letters = get_letters(source_word)
 
                     # Check if this is a DELETE operation
@@ -1649,11 +1686,24 @@ class CompoundWordplayAnalyzer:
                 # EXTRACT operation: add source word as providing the extracted letter
                 source_desc = 'last letter of' if 'last' in part[
                     'subtype'].lower() else 'first letter of'
-                word_roles.append(WordRole(
-                    part['source_word'], 'substitution', part['extracted_letter'],
-                    source_desc
-                ))
-                accounted_words.add(part['source_word'].lower())
+                source_words = part['source_word'].split()
+                extracted = part['extracted_letter']
+
+                if len(source_words) > 1 and len(extracted) == len(source_words):
+                    # Acrostic: each source word contributes one letter
+                    for sw, letter in zip(source_words, extracted):
+                        word_roles.append(WordRole(
+                            sw, 'substitution', letter,
+                            source_desc
+                        ))
+                        accounted_words.add(sw.lower())
+                else:
+                    # Single source word
+                    word_roles.append(WordRole(
+                        part['source_word'], 'substitution', extracted,
+                        source_desc
+                    ))
+                    accounted_words.add(part['source_word'].lower())
 
                 # Add to substitutions list for formula building
                 found_substitutions.append((
@@ -1720,9 +1770,21 @@ class CompoundWordplayAnalyzer:
         has_container_insertion = bool(insertion_indicators_in_remaining)
         if not has_container_insertion:
             for w in remaining_words:
-                ind = self.db.lookup_indicator(w)
-                if ind and ind.wordplay_type in ('insertion', 'container'):
-                    has_container_insertion = True
+                # Check if this word has container/insertion as ANY indicator type,
+                # not just the top-ranked one. Words like "about" rank as anagram
+                # (freq 104) but also have container (freq 0). Since we're past the
+                # anagram stage, container is a valid interpretation.
+                word_clean = ''.join(c for c in w.lower() if c.isalpha())
+                if word_clean:
+                    conn = self.db._get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT 1 FROM indicators
+                        WHERE LOWER(word) = ? AND wordplay_type IN ('insertion', 'container')
+                        LIMIT 1
+                    """, (word_clean,))
+                    if cursor.fetchone():
+                        has_container_insertion = True
                     break
 
         # Check for MULTI-WORD indicators (2-5 words) of ANY type
