@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31093
-Generated: 2026-02-04 07:45:22
+Generated: 2026-02-04 20:52:04
 Total clues: 32
 ================================================================================
 
@@ -8,13 +8,13 @@ SUMMARY
 ----------------------------------------
   Double definitions:       1
   Lurkers:                  0
-  Anagram/compound solved:  5
+  Anagram/compound solved:  4
   Anagram/compound partial: 0
   General wordplay solved:  10
-  General wordplay partial: 16
+  General wordplay partial: 17
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             16/32
+  TOTAL SOLVED:             15/32
 
 ================================================================================
 DOUBLE DEFINITIONS
@@ -50,17 +50,6 @@ ANAGRAM / COMPOUND WORDPLAY
     • "rearranged" = anagram indicator
     • "judge" = definition for ESTIMATE
     • "for" = link word
-
-  [SOLVED] CLUE: Blue marble is cracked on base (9)
-  ANSWER: MISERABLE|MISERABLE
-  DEFINITION: Blue
-  FORMULA: anagram(MARBLE + IS) + E (base) = MISERABLE
-  BREAKDOWN:
-    • "Blue" = definition for MISERABLE
-    • "marble" = anagram fodder
-    • "is" = anagram fodder
-    • "cracked" = anagram indicator
-    • "base" = E (database (single_letter))
 
   [SOLVED] CLUE: Turning calmer? I wonder (7)
   ANSWER: MIRACLE|MIRACLE
@@ -147,19 +136,18 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "found in" = insertion_indicator
     "socks" = BEATS (database (synonym))
 
-  [PARTIAL] CLUE: Admitted what thespian did with mushroom inside (8)
+  [SOLVED] CLUE: Admitted what thespian did with mushroom inside (8)
   ANSWER: ACCEPTED
   DEFINITION: Admitted
-  FORMULA: CEP (mushroom) + ? = ACCEPTED
+  FORMULA: ACTED (thespian) + CEP (mushroom) = ACCEPTED
   BREAKDOWN:
     "Admitted" = definition for ACCEPTED
+    "thespian" = ACTED (database (synonym))
     "mushroom" = CEP (database (synonym))
     "inside" = hidden indicator
-    "what" = unresolved
-    "thespian" = unresolved
-    "did" = unresolved
-    "with" = unresolved
-  LETTERS NEEDED: ACTED
+    "what" = link word
+    "did" = link word
+    "with" = link word
 
   [SOLVED] CLUE: Praise? Conservative gets embarrassed by it (6)
   ANSWER: CREDIT
@@ -239,17 +227,17 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Talked to lady bare, then put clothes on (9)
   ANSWER: ADDRESSED
   DEFINITION: Talked to
-  FORMULA: ? = ADDRESSED
+  FORMULA: SEED (put) + AS (on) + ? = ADDRESSED
   BREAKDOWN:
     "Talked" = definition for ADDRESSED
     "to" = definition for ADDRESSED
     "bare," = deletion indicator
     "then" = positional indicator (construction order)
+    "put" = SEED (database (synonym))
     "clothes" = deletion indicator
+    "on" = AS (database (synonym))
     "lady" = unresolved
-    "put" = unresolved
-    "on" = unresolved
-  LETTERS NEEDED: ADDRESSED
+  LETTERS NEEDED: DDR
 
   [PARTIAL] CLUE: Detainee finally let out, creating incident (5)
   ANSWER: EVENT
@@ -263,6 +251,19 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "let" = unresolved
     "creating" = unresolved
   LETTERS NEEDED: T
+
+  [PARTIAL] CLUE: Blue marble is cracked on base (9)
+  ANSWER: MISERABLE
+  DEFINITION: base
+  FORMULA: SEA (Blue) + LIE (is) + ? = MISERABLE
+  BREAKDOWN:
+    "Blue" = SEA (database (synonym))
+    "is" = LIE (database (synonym))
+    "base" = definition for MISERABLE
+    "marble" = unresolved
+    "cracked" = unresolved
+    "on" = unresolved
+  LETTERS NEEDED: MRB
 
   [PARTIAL] CLUE: Dad’s crossing the endless tracks (5)
   ANSWER: PATHS
@@ -279,26 +280,26 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Diet regularly abandoned? Lock up pudding! (7)
   ANSWER: DESSERT
   DEFINITION: pudding!
-  FORMULA: ? = DESSERT
+  FORMULA: DESERT (abandoned?) + ? = DESSERT
   BREAKDOWN:
+    "abandoned?" = DESERT (database (synonym))
     "up" = reversal indicator
     "pudding!" = definition for DESSERT
     "Diet" = unresolved
     "regularly" = unresolved
-    "abandoned?" = unresolved
     "Lock" = unresolved
-  LETTERS NEEDED: DESSERT
+  LETTERS NEEDED: S
 
   [PARTIAL] CLUE: Half upset about court orders (6)
   ANSWER: EDICTS
-  DEFINITION: orders
+  DEFINITION: court orders
   FORMULA: C (about) + SET (second half of upset) + ? = EDICTS
   BREAKDOWN:
     "Half" = deletion indicator
     "upset" = SET (second half of upset)
     "about" = C (database (single_letter))
+    "court" = definition for EDICTS
     "orders" = definition for EDICTS
-    "court" = unresolved
   LETTERS NEEDED: DI
 
   [PARTIAL] CLUE: Hearing car touching fence, not loudly (8)
@@ -317,16 +318,16 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: See lob – not the first tennis shot? (7)
   ANSWER: OBSERVE
   DEFINITION: See
-  FORMULA: ? = OBSERVE
+  FORMULA: SO (not) + ? = OBSERVE
   BREAKDOWN:
     "See" = definition for OBSERVE
+    "not" = SO (database (synonym))
     "first" = positional indicator (construction order)
     "lob" = unresolved
-    "not" = unresolved
     "the" = unresolved
     "tennis" = unresolved
     "shot?" = unresolved
-  LETTERS NEEDED: OBSERVE
+  LETTERS NEEDED: BERVE
 
   [SOLVED] CLUE: Fixed a page by cutting (9)
   ANSWER: APPOINTED
@@ -356,26 +357,27 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: A little time with paper and editor’s captivated (9)
   ANSWER: ATTRACTED
   DEFINITION: captivated
-  FORMULA: A (A) + T (time) + TRACT (paper) + ? = ATTRACTED
+  FORMULA: A (A) + TRACE (little) + T (time) + ? = ATTRACTED
   BREAKDOWN:
     "A" = A (database (single_letter))
+    "little" = TRACE (database (synonym))
     "time" = T (database (single_letter))
-    "paper" = TRACT (database (synonym))
     "captivated" = definition for ATTRACTED
-    "little" = unresolved
     "with" = unresolved
+    "paper" = unresolved
     "and" = unresolved
     "editor’s" = unresolved
-  LETTERS NEEDED: ED
+  LETTERS NEEDED: TD
 
-  [SOLVED] CLUE: Fend off chap’s cleaner (9)
+  [PARTIAL] CLUE: Fend off chap’s cleaner (9)
   ANSWER: DETERGENT
   DEFINITION: cleaner
-  FORMULA: GENT (chap’s) + DETER (fend off) = DETERGENT
+  FORMULA: DETER (fend off) + ? = DETERGENT
   BREAKDOWN:
     "fend off" = DETER (database phrase (synonym))
-    "chap’s" = GENT (database (synonym))
     "cleaner" = definition for DETERGENT
+    "chap’s" = unresolved
+  LETTERS NEEDED: GENT
 
   [PARTIAL] CLUE: Physicist, surrounded by reeling drunkards, suffers (8)
   ANSWER: STOMACHS

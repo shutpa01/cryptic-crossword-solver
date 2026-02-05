@@ -1667,18 +1667,6 @@ class CompoundWordplayAnalyzer:
                             needed_letters = needed_letters.replace(c, '', 1)
                         break  # Stop at first valid substitution for this word
 
-        # Pre-check: does this clue contain container/insertion indicators?
-        # Used to decide whether substitutions must be contiguous in answer.
-        # In charade clues (no container/insertion), each piece must be a
-        # contiguous substring. Container/insertion clues legitimately split words.
-        has_container_insertion = bool(insertion_indicators_in_remaining)
-        if not has_container_insertion:
-            for w in remaining_words:
-                ind = self.db.lookup_indicator(w)
-                if ind and ind.wordplay_type in ('insertion', 'container'):
-                    has_container_insertion = True
-                    break
-
         for word in remaining_words:
             word_lower = word.lower()
             word_letters = get_letters(word)
@@ -1963,11 +1951,6 @@ class CompoundWordplayAnalyzer:
                         can_use = False
                         break
                 if can_use:
-                    # In charade clues (no container/insertion), reject substitutions
-                    # whose letters are scattered in the answer (e.g., GET in DETERGENT).
-                    # Each charade piece must be a contiguous substring of the answer.
-                    if not has_container_insertion and len(sub_letters) > 1 and sub_letters not in answer_upper:
-                        continue
                     found_substitutions.append((word, sub))
                     word_roles.append(WordRole(
                         word, 'substitution', sub_letters,
@@ -1978,7 +1961,7 @@ class CompoundWordplayAnalyzer:
                     for c in sub_letters:
                         needed_letters = needed_letters.replace(c, '', 1)
 
-                    # NEW: Check for adjacent positional/insertion indicator
+                    # Check for adjacent positional/insertion indicator
                     # This claims words like "in" as positional indicators for the substitution
                     # preventing them from being incorrectly used as anagram fodder
                     try:
@@ -2012,8 +1995,10 @@ class CompoundWordplayAnalyzer:
                     break  # Stop at first valid substitution for this word
 
         # Check for MULTI-WORD phrase substitutions (e.g., "the french" -> LA,
-        # "group of animals" -> HERD). Tries all contiguous phrases up to 10 words.
-        # This must come after single-word checks to avoid duplicate processing.
+        # "group of animals" -> HERD, "fend off" -> DETER).
+        # Tries all contiguous phrases up to 10 words.
+        # If a phrase word was provisionally claimed by a single-word substitution,
+        # override it if the phrase provides more letters.
         if needed_letters:
             max_phrase_len = min(len(remaining_words), 10)
             for phrase_len in range(2, max_phrase_len + 1):
@@ -2021,17 +2006,49 @@ class CompoundWordplayAnalyzer:
                     phrase_words = remaining_words[i:i + phrase_len]
                     phrase_words_lower = [w.lower() for w in phrase_words]
 
-                    # Skip if any word already accounted for
-                    if any(w in accounted_words for w in phrase_words_lower):
+                    # Check which phrase words are already claimed
+                    blocked_by_non_sub = False
+                    overridable_subs = []  # (word, sub, WordRole) that could be undone
+                    for pw in phrase_words_lower:
+                        if pw in accounted_words:
+                            # Is it claimed by a single-word substitution? If so, it's overridable
+                            matching_sub = None
+                            for fs_word, fs_sub in found_substitutions:
+                                if fs_word.lower() == pw:
+                                    matching_sub = (fs_word, fs_sub)
+                                    break
+                            if matching_sub:
+                                overridable_subs.append(matching_sub)
+                            else:
+                                # Claimed by indicator, definition, etc - can't override
+                                blocked_by_non_sub = True
+                                break
+
+                    if blocked_by_non_sub:
                         continue
 
+                    # All unclaimed, or all blocked words are overridable subs
                     # Build the phrase and look it up
                     phrase = ' '.join(phrase_words_lower)
                     phrase_subs = self.db.lookup_phrase_substitution(phrase)
 
                     for sub in phrase_subs:
                         sub_letters = sub.letters.upper()
-                        temp_needed = list(needed_letters)
+
+                        # Calculate what needed_letters would be if we undo overridable subs
+                        test_needed = needed_letters
+                        overridable_letter_count = 0
+                        for ov_word, ov_sub in overridable_subs:
+                            ov_letters = ov_sub.letters.upper()
+                            overridable_letter_count += len(ov_letters)
+                            test_needed += ov_letters  # Give back the letters
+
+                        # Only override if phrase provides strictly more letters
+                        if overridable_subs and len(sub_letters) <= overridable_letter_count:
+                            continue
+
+                        # Check if phrase provides letters we need (after giving back overridden ones)
+                        temp_needed = list(test_needed)
                         can_use = True
                         for c in sub_letters:
                             if c in temp_needed:
@@ -2040,7 +2057,17 @@ class CompoundWordplayAnalyzer:
                                 can_use = False
                                 break
                         if can_use:
-                            # Found a valid phrase substitution!
+                            # Undo any overridable single-word substitutions
+                            for ov_word, ov_sub in overridable_subs:
+                                found_substitutions.remove((ov_word, ov_sub))
+                                # Remove from word_roles
+                                word_roles[:] = [wr for wr in word_roles
+                                                 if not (wr.word.lower() == ov_word.lower()
+                                                         and wr.role == 'substitution')]
+                                accounted_words.discard(ov_word.lower())
+
+                            # Apply phrase substitution
+                            needed_letters = ''.join(temp_needed)
                             found_substitutions.append((phrase, sub))
                             word_roles.append(WordRole(
                                 phrase, 'substitution', sub_letters,
@@ -2048,9 +2075,6 @@ class CompoundWordplayAnalyzer:
                             ))
                             for w in phrase_words_lower:
                                 accounted_words.add(w)
-                            # Update needed letters
-                            for c in sub_letters:
-                                needed_letters = needed_letters.replace(c, '', 1)
                             break  # Stop at first valid substitution for this phrase
 
         # Build compound solution
