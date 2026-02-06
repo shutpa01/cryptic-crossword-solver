@@ -2411,7 +2411,18 @@ class CompoundWordplayAnalyzer:
         deletion_indicators_found = [(w, i) for w, i in operation_indicators
                                      if i.wordplay_type == 'deletion']
 
-        if deletion_indicators_found and needed_letters and unresolved_words:
+        # Also consider link words as potential deletion fodder (e.g., "the endless" -> TH)
+        potential_deletion_fodder = list(unresolved_words)
+        if deletion_indicators_found and needed_letters:
+            for w in remaining_words:
+                w_lower = w.lower()
+                w_norm = norm_letters(w)
+                if w_norm and w_norm in self.link_words and w_lower not in [x.lower() for
+                                                                            x in
+                                                                            potential_deletion_fodder]:
+                    potential_deletion_fodder.append(w)
+
+        if deletion_indicators_found and needed_letters and potential_deletion_fodder:
             # We have deletion indicators but still need letters
             # Check unresolved words to see if applying deletion provides needed letters
 
@@ -2427,7 +2438,8 @@ class CompoundWordplayAnalyzer:
                             deletion_ind_positions[idx] = (del_word, del_ind)
                             break
 
-            for unres_word in list(unresolved_words):  # Copy list since we modify it
+            for unres_word in list(
+                    potential_deletion_fodder):  # Copy list since we modify it
                 unres_lower = unres_word.lower()
                 unres_letters = get_letters(unres_word)
 
@@ -2550,9 +2562,12 @@ class CompoundWordplayAnalyzer:
                     for c in candidate_letters:
                         needed_letters = needed_letters.replace(c, '', 1)
 
-                    # Remove from unresolved
+                    # Remove from unresolved and potential_deletion_fodder
                     unresolved_words = [w for w in unresolved_words
                                         if norm_letters(w) != norm_letters(unres_word)]
+                    potential_deletion_fodder = [w for w in potential_deletion_fodder
+                                                 if norm_letters(w) != norm_letters(
+                            unres_word)]
                     break  # Only process one deletion source
 
         # Reorder needed_letters to match their position in the answer.

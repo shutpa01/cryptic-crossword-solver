@@ -35,9 +35,10 @@ def _word_spans_letters_only(clue_text: str) -> list[tuple[int, int]]:
 def _is_valid_lurker_span(span: tuple[int, int], word_spans: list[tuple[int, int]]) -> bool:
     """
     A valid lurker span must:
-      - cross exactly one word boundary
+      - cross at least one word boundary (span 2+ words)
       - take a proper suffix of the first word
-      - take a proper prefix of the second word
+      - take a proper prefix of the last word
+      - include complete middle words (if any)
     """
     s, e = span
 
@@ -47,22 +48,23 @@ def _is_valid_lurker_span(span: tuple[int, int], word_spans: list[tuple[int, int
         if s < we and e > ws:
             touched.append((ws, we))
 
-    # must touch exactly two adjacent words
-    if len(touched) != 2:
+    # must touch at least two words, up to three
+    if len(touched) < 2 or len(touched) > 3:
         return False
 
-    (w1s, w1e), (w2s, w2e) = touched
+    # Check touched words are adjacent
+    for i in range(len(touched) - 1):
+        if touched[i][1] != touched[i + 1][0]:
+            return False
 
-    # must be adjacent words
-    if w1e != w2s:
-        return False
-
-    # must start inside first word (not at its boundary)
+    # First word: must start inside (proper suffix)
+    w1s, w1e = touched[0]
     if not (w1s < s < w1e):
         return False
 
-    # must end inside second word (not at its boundary)
-    if not (w2s < e < w2e):
+    # Last word: must end inside (proper prefix)
+    wLs, wLe = touched[-1]
+    if not (wLs < e < wLe):
         return False
 
     return True

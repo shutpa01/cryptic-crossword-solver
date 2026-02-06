@@ -56,7 +56,7 @@ MAX_DISPLAY = 50  # max number of clues to print
 SINGLE_CLUE_MATCH = ""  # normalised substring match on clue_text (highest priority)
 SOURCE = "telegraph"  # e.g. "telegraph", "times", "guardian", "ft", "independent" (
 # empty = all)
-PUZZLE_NUMBER = "31093"  # e.g. "29345" (empty = all)
+PUZZLE_NUMBER = "31092"  # e.g. "29345" (empty = all)
 
 # NEW: Use known answer as single candidate (skip definition candidate generation)
 USE_KNOWN_ANSWER = True  # When True, answer becomes the only candidate
