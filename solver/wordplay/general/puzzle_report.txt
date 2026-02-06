@@ -1,20 +1,20 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31093
-Generated: 2026-02-05 05:13:03
+Generated: 2026-02-06 03:44:58
 Total clues: 32
 ================================================================================
 
 SUMMARY
 ----------------------------------------
-  Double definitions:       1
+  Double definitions:       2
   Lurkers:                  0
-  Anagram/compound solved:  2
+  Anagram/compound solved:  3
   Anagram/compound partial: 0
-  General wordplay solved:  17
-  General wordplay partial: 12
+  General wordplay solved:  23
+  General wordplay partial: 4
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             20/32
+  TOTAL SOLVED:             28/32
 
 ================================================================================
 DOUBLE DEFINITIONS
@@ -23,6 +23,10 @@ DOUBLE DEFINITIONS
   CLUE: Vehicle moved slowly and aimlessly (5)
   ANSWER: MOPED
   DEFINITIONS: Vehicle, slowly and aimlessly
+
+  CLUE: First-rate police officer (5)
+  ANSWER: SUPER
+  DEFINITIONS: First-rate, police officer
 
 ================================================================================
 ANAGRAM / COMPOUND WORDPLAY
@@ -40,6 +44,17 @@ ANAGRAM / COMPOUND WORDPLAY
     • "shifted" = anagram fodder
     • "hospital’s" = H (to be removed)
     • "shed" = deletion indicator
+
+  [SOLVED] CLUE: Blue marble is cracked on base (9)
+  ANSWER: MISERABLE|MISERABLE
+  DEFINITION: Blue
+  FORMULA: anagram(MARBLE + IS) + E (base) = MISERABLE
+  BREAKDOWN:
+    • "Blue" = definition for MISERABLE
+    • "marble" = anagram fodder
+    • "is" = anagram fodder
+    • "cracked" = anagram indicator
+    • "base" = E (database (single_letter))
 
   [SOLVED] CLUE: Indicate group of animals going round a lake (6)
   ANSWER: HERALD|HERALD
@@ -68,16 +83,6 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "the spanish" = EL (database phrase (foreign_spanish))
     "lecture" = ORATE (database (synonym))
 
-  [PARTIAL] CLUE: First-rate police officer (5)
-  ANSWER: SUPER
-  DEFINITION: police officer
-  FORMULA: ? = SUPER
-  BREAKDOWN:
-    "police" = definition for SUPER
-    "officer" = definition for SUPER
-    "First-rate" = unresolved
-  LETTERS NEEDED: SUPER
-
   [SOLVED] CLUE: Particular exercises by Charlie in period of inactivity (7)
   ANSWER: RESPECT
   DEFINITION: Particular
@@ -87,10 +92,10 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "exercises" = PE (database (substitution))
     "Charlie" = C (database (nato_phonetic))
     "in" = hidden indicator
+    "period" = REST (phrase "period of inactivity" → REST)
+    "of" =  ((part of "period of inactivity"))
+    "inactivity" =  ((part of "period of inactivity"))
     "by" = link word
-    "period" = wordplay connector
-    "of" = link word
-    "inactivity" = wordplay connector
 
   [SOLVED] CLUE: Before each run, recline and recuperate initially (7)
   ANSWER: EARLIER
@@ -115,19 +120,18 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "found in" = insertion_indicator
     "socks" = BEATS (database (synonym))
 
-  [PARTIAL] CLUE: Admitted what thespian did with mushroom inside (8)
+  [SOLVED] CLUE: Admitted what thespian did with mushroom inside (8)
   ANSWER: ACCEPTED
   DEFINITION: Admitted
-  FORMULA: CEP (mushroom) + ? = ACCEPTED
+  FORMULA: CEP (mushroom) + ACTED (thespian) = ACCEPTED
   BREAKDOWN:
     "Admitted" = definition for ACCEPTED
+    "thespian" = ACTED (database (synonym))
     "mushroom" = CEP (database (synonym))
     "inside" = hidden indicator
-    "what" = unresolved
-    "thespian" = unresolved
-    "did" = unresolved
-    "with" = unresolved
-  LETTERS NEEDED: ACTED
+    "what" = link word
+    "did" = link word
+    "with" = link word
 
   [SOLVED] CLUE: Teatime’s rearranged for judge (8)
   ANSWER: 
@@ -153,7 +157,7 @@ GENERAL WORDPLAY (NON-ANAGRAM)
 
   [SOLVED] CLUE: A good artist is enthralled by obscure technical drawing (7)
   ANSWER: DIAGRAM
-  DEFINITION: technical drawing
+  DEFINITION: drawing
   FORMULA: A (A) + G (good) + RA (artist) + DIM (obscure) = DIAGRAM
   BREAKDOWN:
     "A" = A (database (single_letter))
@@ -161,9 +165,9 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "artist" = RA (database (abbreviation))
     "enthralled" = container indicator
     "obscure" = DIM (database (synonym))
-    "technical" = definition for DIAGRAM
     "drawing" = definition for DIAGRAM
     "by" = link word
+    "technical" = wordplay connector
 
   [SOLVED] CLUE: Give authority to European politician and leaders in Oslo will expect results (7)
   ANSWER: EMPOWER
@@ -182,109 +186,91 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "results" = R (first letter of)
     "and" = link word
 
-  [PARTIAL] CLUE: Greek’s sign of nerves after old group of soldiers retreated (5)
+  [SOLVED] CLUE: Greek’s sign of nerves after old group of soldiers retreated (5)
   ANSWER: ATTIC
   DEFINITION: greek
-  FORMULA: ? = ATTIC
+  FORMULA: ATTIC (Greek’s) = ATTIC
   BREAKDOWN:
+    "Greek’s" = ATTIC (database (synonym))
     "sign of" = parts_indicator
     "after" = positional indicator (construction order)
-    "Greek’s" = unresolved
-    "nerves" = unresolved
-    "old" = unresolved
-    "group" = unresolved
-    "soldiers" = unresolved
-    "retreated" = unresolved
-  LETTERS NEEDED: ATTIC
+    "nerves" = wordplay connector
+    "old" = wordplay connector
+    "group" = wordplay connector
+    "soldiers" = wordplay connector
+    "retreated" = wordplay connector
 
-  [PARTIAL] CLUE: Children argue about new, difficult task (9)
+  [SOLVED] CLUE: Children argue about new, difficult task (9)
   ANSWER: CHALLENGE
   DEFINITION: difficult task
-  FORMULA: CH (Children) + N (new,) + ? = CHALLENGE
+  FORMULA: CH (Children) + N (new,) + ALLEGE (argue) = CHALLENGE
   BREAKDOWN:
     "Children" = CH (database (double_letter))
+    "argue" = ALLEGE (database (synonym))
     "new," = N (database (single_letter))
     "difficult" = definition for CHALLENGE
     "task" = definition for CHALLENGE
-    "argue" = unresolved
-    "about" = unresolved
-  LETTERS NEEDED: ALLEGE
+    "about" = link word
 
-  [PARTIAL] CLUE: Talked to lady bare, then put clothes on (9)
+  [SOLVED] CLUE: Talked to lady bare, then put clothes on (9)
   ANSWER: ADDRESSED
   DEFINITION: Talked to
-  FORMULA: ? = ADDRESSED
+  FORMULA: DRESSED (put clothes on) + AD (minus ends of lady) = ADDRESSED
   BREAKDOWN:
     "Talked" = definition for ADDRESSED
     "to" = definition for ADDRESSED
+    "lady" = AD (minus ends of lady)
     "bare," = deletion indicator
     "then" = positional indicator (construction order)
-    "clothes" = deletion indicator
-    "lady" = unresolved
-    "put" = unresolved
-    "on" = unresolved
-  LETTERS NEEDED: ADDRESSED
+    "put" = DRESSED (phrase "put clothes on" → DRESSED)
+    "clothes" =  ((part of "put clothes on"))
+    "on" =  ((part of "put clothes on"))
 
-  [PARTIAL] CLUE: Detainee finally let out, creating incident (5)
+  [SOLVED] CLUE: Detainee finally let out, creating incident (5)
   ANSWER: EVENT
   DEFINITION: incident
-  FORMULA: EVEN (out,) + ? = EVENT
+  FORMULA: E (Detainee) + VENT (let out,) = EVENT
   BREAKDOWN:
-    "finally" = positional indicator (construction order)
-    "out," = EVEN (database (synonym))
+    "Detainee" = E (last letter of)
+    "finally" = last letter indicator
+    "let out," = VENT (database phrase (synonym))
     "incident" = definition for EVENT
-    "Detainee" = unresolved
-    "let" = unresolved
-    "creating" = unresolved
-  LETTERS NEEDED: T
-
-  [SOLVED] CLUE: Blue marble is cracked on base (9)
-  ANSWER: MISERABLE
-  DEFINITION: base
-  FORMULA: MISERABLE (Blue) = MISERABLE
-  BREAKDOWN:
-    "Blue" = MISERABLE (database (synonym))
-    "base" = definition for MISERABLE
-    "marble" = wordplay connector
-    "is" = link word
-    "cracked" = wordplay connector
-    "on" = link word
+    "creating" = link word
 
   [PARTIAL] CLUE: Dad’s crossing the endless tracks (5)
   ANSWER: PATHS
   DEFINITION: tracks
-  FORMULA: ? = PATHS
+  FORMULA: PAS (Dad’s) + ? = PATHS
   BREAKDOWN:
-    "endless" = deletion indicator
+    "Dad’s" = PAS (database (synonym))
+    "crossing" = container indicator
     "tracks" = definition for PATHS
-    "Dad’s" = unresolved
-    "crossing" = unresolved
     "the" = unresolved
-  LETTERS NEEDED: PATHS
+    "endless" = unresolved
+  LETTERS NEEDED: TH
 
-  [PARTIAL] CLUE: Diet regularly abandoned? Lock up pudding! (7)
+  [SOLVED] CLUE: Diet regularly abandoned? Lock up pudding! (7)
   ANSWER: DESSERT
   DEFINITION: pudding!
-  FORMULA: ? = DESSERT
+  FORMULA: DE (Diet) + TRESS (Lock) = DESSERT
   BREAKDOWN:
+    "Diet" = DE (odd letters of Diet)
+    "regularly" = alternating indicator
+    "Lock" = TRESS (database (synonym))
     "up" = reversal indicator
     "pudding!" = definition for DESSERT
-    "Diet" = unresolved
-    "regularly" = unresolved
-    "abandoned?" = unresolved
-    "Lock" = unresolved
-  LETTERS NEEDED: DESSERT
+    "abandoned?" = wordplay connector
 
   [PARTIAL] CLUE: Half upset about court orders (6)
   ANSWER: EDICTS
-  DEFINITION: court orders
+  DEFINITION: orders
   FORMULA: C (about) + SET (second half of upset) + ? = EDICTS
   BREAKDOWN:
     "Half" = deletion indicator
     "upset" = SET (second half of upset)
     "about" = C (database (single_letter))
-    "court" = definition for EDICTS
     "orders" = definition for EDICTS
+    "court" = unresolved
   LETTERS NEEDED: DI
 
   [PARTIAL] CLUE: Hearing car touching fence, not loudly (8)
@@ -337,27 +323,27 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "resentment" = unresolved
   LETTERS NEEDED: ERR
 
-  [PARTIAL] CLUE: A little time with paper and editor’s captivated (9)
+  [SOLVED] CLUE: A little time with paper and editor’s captivated (9)
   ANSWER: ATTRACTED
   DEFINITION: captivated
-  FORMULA: TRACT (paper) + TAD (a little) + ? = ATTRACTED
+  FORMULA: A (A) + T (time) + TRACT (paper) + ED (editor’s) = ATTRACTED
   BREAKDOWN:
-    "a little" = TAD (database phrase (synonym))
+    "A" = A (database (single_letter))
+    "time" = T (database (single_letter))
     "paper" = TRACT (database (synonym))
+    "editor’s" = ED (database (abbreviation))
     "captivated" = definition for ATTRACTED
-    "time" = unresolved
-    "with" = unresolved
-    "and" = unresolved
-    "editor’s" = unresolved
-  LETTERS NEEDED: E
+    "little" = wordplay connector
+    "with" = link word
+    "and" = link word
 
   [SOLVED] CLUE: Fend off chap’s cleaner (9)
   ANSWER: DETERGENT
   DEFINITION: cleaner
-  FORMULA: GENT (chap’s) + DETER (fend off) = DETERGENT
+  FORMULA: gent (chap’s) + DETER (fend off) = DETERGENT
   BREAKDOWN:
     "fend off" = DETER (database phrase (synonym))
-    "chap’s" = GENT (database (synonym))
+    "chap’s" = GENT (database (substitution))
     "cleaner" = definition for DETERGENT
 
   [SOLVED] CLUE: Physicist, surrounded by reeling drunkards, suffers (8)
