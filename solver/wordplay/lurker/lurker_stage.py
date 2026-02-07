@@ -188,6 +188,8 @@ def generate_lurker_hypotheses(
     A valid lurker must take a proper suffix of one word
     and a proper prefix of the next.
     """
+
+
     if not isinstance(enumeration, int) or enumeration <= 0:
         return []
 

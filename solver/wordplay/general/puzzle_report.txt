@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31092
-Generated: 2026-02-06 04:50:06
+Generated: 2026-02-07 02:48:35
 Total clues: 31
 ================================================================================
 
@@ -10,11 +10,11 @@ SUMMARY
   Lurkers:                  1
   Anagram/compound solved:  2
   Anagram/compound partial: 0
-  General wordplay solved:  16
-  General wordplay partial: 13
+  General wordplay solved:  24
+  General wordplay partial: 4
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             19/31
+  TOTAL SOLVED:             27/31
 
 ================================================================================
 HIDDEN WORDS (LURKERS)
@@ -22,7 +22,7 @@ HIDDEN WORDS (LURKERS)
 
   CLUE: Sanguine, a pigeon traps rodent (6,3)
   ANSWER: GUINEA PIG
-  HIDDEN IN: 
+  HIDDEN IN: sanGUINEAPIGeontrapsrodent
 
 ================================================================================
 ANAGRAM / COMPOUND WORDPLAY
@@ -66,24 +66,22 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "enraging" = unresolved
     "tune" = unresolved
 
-  [PARTIAL] CLUE: Finally you went, entering pits for short periods (7)
+  [SOLVED] CLUE: Finally you went, entering pits for short periods (7)
   ANSWER: MINUTES
   DEFINITION: short periods
-  FORMULA: U (you) + ? = MINUTES
+  FORMULA: UT (you went,) + MINES (pits) = MINUTES
   BREAKDOWN:
     "Finally" = last letter indicator
-    "you" = U (last letter of)
+    "you went," = UT (last letters of)
     "entering" = container indicator
+    "pits" = MINES (database (synonym))
     "short" = definition for MINUTES
     "periods" = definition for MINUTES
-    "went," = unresolved
-    "pits" = unresolved
-    "for" = unresolved
-  LETTERS NEEDED: MINTES
+    "for" = link word
 
   [SOLVED] CLUE: One who’s pragmatic about a catalogue (7)
   ANSWER: REALIST
-  DEFINITION: One whos pragmatic
+  DEFINITION: One who's pragmatic
   FORMULA: RE (about) + A (a) + LIST (catalogue) = REALIST
   BREAKDOWN:
     "One" = definition for REALIST
@@ -129,16 +127,15 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "pal" = unresolved
     "and" = unresolved
 
-  [PARTIAL] CLUE: British bad guy’s accent (6)
+  [SOLVED] CLUE: British bad guy’s accent (6)
   ANSWER: BROGUE
   DEFINITION: accent
-  FORMULA: B (British) + ? = BROGUE
+  FORMULA: B (British) + ROGUE (bad guy) = BROGUE
   BREAKDOWN:
     "British" = B (database (single_letter))
+    "bad" = ROGUE (phrase "bad guy" → ROGUE)
+    "guy’s" =  ((part of "bad guy"))
     "accent" = definition for BROGUE
-    "bad" = unresolved
-    "guy’s" = unresolved
-  LETTERS NEEDED: ROGUE
 
   [SOLVED] CLUE: Continuing exercise, chap comes in ripped (9)
   ANSWER: PERMANENT
@@ -162,18 +159,17 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "the french" = LA (database phrase (foreign_french))
     "doggy" = PUP (database (synonym))
 
-  [PARTIAL] CLUE: Mishandles rages, suppressing extremists from Bristol (7)
+  [SOLVED] CLUE: Mishandles rages, suppressing extremists from Bristol (7)
   ANSWER: FUMBLES
   DEFINITION: Mishandles
-  FORMULA: ? = FUMBLES
+  FORMULA: BL (Bristol) + FUMES (rages,) = FUMBLES
   BREAKDOWN:
     "Mishandles" = definition for FUMBLES
+    "rages," = FUMES (database (synonym))
+    "extremists" = letter selector
     "from" = hidden indicator
-    "rages," = unresolved
-    "suppressing" = unresolved
-    "extremists" = unresolved
-    "Bristol" = unresolved
-  LETTERS NEEDED: FUMBLES
+    "Bristol" = BL (first and last letters of)
+    "suppressing" = wordplay connector
 
   [SOLVED] CLUE: Get better free, unlimited insurance (7)
   ANSWER: RECOVER
@@ -221,41 +217,35 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "flipping" = unresolved
     "ten" = unresolved
 
-  [PARTIAL] CLUE: Public schoolboys welcoming southern Europeans (9)
+  [SOLVED] CLUE: Public schoolboys welcoming southern Europeans (9)
   ANSWER: ESTONIANS
   DEFINITION: Europeans
-  FORMULA: INN (Public) + S (southern) + ? = ESTONIANS
+  FORMULA: S (southern) + ETONIANS (public schoolboys) = ESTONIANS
   BREAKDOWN:
-    "Public" = INN (database (synonym))
+    "public schoolboys" = ETONIANS (database phrase (synonym))
     "welcoming" = container indicator
     "southern" = S (database (single_letter))
     "Europeans" = definition for ESTONIANS
-    "schoolboys" = unresolved
-  LETTERS NEEDED: ETOAS
 
-  [PARTIAL] CLUE: Racecourse records only matter initially (5)
+  [SOLVED] CLUE: Racecourse records only matter initially (5)
   ANSWER: EPSOM
   DEFINITION: Racecourse
-  FORMULA: M (matter) + ? = EPSOM
+  FORMULA: EPS (records) + OM (only matter) = EPSOM
   BREAKDOWN:
     "Racecourse" = definition for EPSOM
-    "matter" = M (first letter of)
+    "records" = EPS (database (synonym))
+    "only matter" = OM (first letters of)
     "initially" = letter selector
-    "records" = unresolved
-    "only" = unresolved
-  LETTERS NEEDED: EPSO
 
-  [PARTIAL] CLUE: Longs to skip English tales (5)
+  [SOLVED] CLUE: Longs to skip English tales (5)
   ANSWER: YARNS
   DEFINITION: tales
-  FORMULA: ? = YARNS
+  FORMULA: YEARNS (Longs) = YARNS
   BREAKDOWN:
+    "Longs" = YEARNS (database (synonym))
+    "to skip" = deletion_indicator
+    "English" = E (to be removed)
     "tales" = definition for YARNS
-    "Longs" = unresolved
-    "to" = unresolved
-    "skip" = unresolved
-    "English" = unresolved
-  LETTERS NEEDED: YARNS
 
   [SOLVED] CLUE: Employment in America for one returning (5)
   ANSWER: USAGE
@@ -268,18 +258,6 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "one" = AGE (database (synonym))
     "returning" = reversal indicator
     "for" = link word
-
-  [PARTIAL] CLUE: Sanguine, a pigeon traps rodent (6,3)
-  ANSWER: GUINEAPIG
-  DEFINITION: rodent
-  FORMULA: AGE (Sanguine,) + IN (a) + ? = GUINEA PIG
-  BREAKDOWN:
-    "Sanguine," = AGE (database (synonym))
-    "a" = IN (database (synonym))
-    "traps" = container indicator
-    "rodent" = definition for GUINEA PIG
-    "pigeon" = unresolved
-  LETTERS NEEDED: UPIG
 
   [SOLVED] CLUE: Fan runs into Tiger Woods’s supporter Hazel? (3-4)
   ANSWER: NUTTREE
@@ -294,16 +272,15 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "Tiger" = wordplay connector
     "Woods’s" = wordplay connector
 
-  [PARTIAL] CLUE: Grubby family member aunt regularly ignored (7)
+  [SOLVED] CLUE: Grubby family member aunt regularly ignored (7)
   ANSWER: UNCLEAN
   DEFINITION: Grubby
-  FORMULA:  (aunt) + UNCLE (family member) + ? = UNCLEAN
+  FORMULA: AN (aunt) + UNCLE (family member) = UNCLEAN
   BREAKDOWN:
     "Grubby" = definition for UNCLEAN
     "family member" = UNCLE (database phrase (synonym))
-    "aunt" =  (database (synonym))
+    "aunt" = AN (first letter of)
     "regularly ignored" = parts_indicator
-  LETTERS NEEDED: AN
 
   [PARTIAL] CLUE: Wide-ranging fear about old sheep (9)
   ANSWER: PANORAMIC
@@ -345,45 +322,44 @@ GENERAL WORDPLAY (NON-ANAGRAM)
   [PARTIAL] CLUE: Ruler and politician admitted to base, heartless error (7)
   ANSWER: EMPEROR
   DEFINITION: Ruler
-  FORMULA: MP (politician) + E (base,) + ? = EMPEROR
+  FORMULA: MP (politician) + E (error) + ? = EMPEROR
   BREAKDOWN:
     "Ruler" = definition for EMPEROR
     "politician" = MP (database (abbreviation))
-    "base," = E (database (single_letter))
+    "base," = letter selector
+    "error" = E (first letter of)
     "and" = unresolved
     "admitted" = unresolved
     "to" = unresolved
     "heartless" = unresolved
-    "error" = unresolved
   LETTERS NEEDED: EROR
 
-  [PARTIAL] CLUE: Exhausted, Tallinn’s out of bounds (3,2)
+  [SOLVED] CLUE: Exhausted, Tallinn’s out of bounds (3,2)
   ANSWER: ALLIN
   DEFINITION: Exhausted
-  FORMULA: ? = ALL IN
+  FORMULA: ALLIN = ALL IN
   BREAKDOWN:
     "Exhausted," = definition for ALL IN
-    "Tallinn’s" = unresolved
-    "out" = unresolved
-    "of" = unresolved
-    "bounds" = unresolved
-  LETTERS NEEDED: ALLIN
+    "Tallinn’s" = ALLIN (minus outer letters)
+    "out" = truncation indicator
+    "of" = truncation indicator
+    "bounds" = truncation indicator
 
   [PARTIAL] CLUE: Gently moves tea sets with no time at all (5)
   ANSWER: EASES
   DEFINITION: Gently moves
-  FORMULA: A (minus last letter of at) + ? = EASES
+  FORMULA: EAT (at) + ONE (all) + ? = EASES
   BREAKDOWN:
     "Gently" = definition for EASES
     "moves" = definition for EASES
-    "no" = deletion indicator
-    "at" = A (minus last letter of at)
+    "no" = ON (to be removed)
+    "time" = T (to be removed)
+    "at" = EAT (database (synonym))
+    "all" = ONE (database (synonym))
     "tea" = unresolved
     "sets" = unresolved
     "with" = unresolved
-    "time" = unresolved
-    "all" = unresolved
-  LETTERS NEEDED: ESES
+  LETTERS NEEDED: SS
 
   [SOLVED] CLUE: Tense hour with strange drone (5)
   ANSWER: THRUM

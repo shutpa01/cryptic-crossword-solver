@@ -1523,18 +1523,146 @@ class CompoundWordplayAnalyzer:
                                                                      'container'):
                 insertion_indicators_in_remaining[i] = (word, indicator_match)
 
-        # SECOND: Check for two-word parts indicators (like "close to", "at first")
+        # SECOND: Check for multi-word parts indicators
         # These extract first/last letters from adjacent words
         parts_found = []
         words_used_by_parts = set()
 
+        # Check THREE-word indicators first (like "out of bounds")
+        for i, word in enumerate(remaining_words[:-2]):
+            three_word = f"{norm_letters(word)} {norm_letters(remaining_words[i + 1])} {norm_letters(remaining_words[i + 2])}"
+            indicator_match = self.db.lookup_indicator(three_word)
+
+            if indicator_match and indicator_match.wordplay_type == 'parts':
+                subtype = indicator_match.subtype or ''
+
+                # Find source word - try PREVIOUS word first
+                source_word = None
+                source_letters = None
+                source_idx = None
+
+                if i > 0:
+                    source_word = remaining_words[i - 1]
+                    # Strip possessive 's before getting letters (Tallinn's → TALLINN)
+                    source_clean = re.sub(r"[''\u2019]s$", "", source_word,
+                                          flags=re.IGNORECASE)
+                    source_letters = get_letters(source_clean)
+                    source_idx = i - 1
+                elif i + 3 < len(remaining_words):
+                    source_word = remaining_words[i + 3]
+                    source_clean = re.sub(r"[''\u2019]s$", "", source_word,
+                                          flags=re.IGNORECASE)
+                    source_letters = get_letters(source_clean)
+                    source_idx = i + 3
+
+                if source_word and source_letters and len(source_letters) >= 3:
+                    # OUTER DELETE: Remove first and last letters
+                    if 'outer' in subtype.lower() and 'delete' in subtype.lower():
+                        remaining_fodder = source_letters[1:-1]  # Remove first and last
+
+                        # Check if remaining matches needed_letters
+                        temp_needed = list(needed_letters)
+                        can_use = True
+                        for c in remaining_fodder:
+                            if c in temp_needed:
+                                temp_needed.remove(c)
+                            else:
+                                can_use = False
+                                break
+
+                        if can_use and remaining_fodder:
+                            ind_display = f"{word} {remaining_words[i + 1]} {remaining_words[i + 2]}"
+                            parts_found.append({
+                                'indicator': ind_display,
+                                'indicator_words': [word, remaining_words[i + 1],
+                                                    remaining_words[i + 2]],
+                                'source_word': source_word,
+                                'remaining_fodder': remaining_fodder,
+                                'subtype': subtype,
+                                'is_delete': True
+                            })
+                            words_used_by_parts.update(
+                                [word.lower(), remaining_words[i + 1].lower(),
+                                 remaining_words[i + 2].lower(), source_word.lower()])
+                            # Update needed letters
+                            for c in remaining_fodder:
+                                needed_letters = needed_letters.replace(c, '', 1)
+
+        # Check TWO-word indicators (like "close to", "at first")
         for i, word in enumerate(remaining_words[:-1]):
+            # Skip if already used by three-word indicator
+            if word.lower() in words_used_by_parts:
+                continue
+
             # Check two-word combination
             two_word = f"{norm_letters(word)} {norm_letters(remaining_words[i + 1])}"
             indicator_match = self.db.lookup_indicator(two_word)
 
             if indicator_match and indicator_match.wordplay_type in ('parts', 'acrostic'):
                 subtype = indicator_match.subtype or ''
+
+                # ALTERNATING: Check for alternating subtypes (e.g., "regularly ignored")
+                # These extract every other letter from PREVIOUS word
+                is_alternating = any(
+                    x in subtype.lower() for x in ['alternate', 'odd', 'even', 'regular'])
+                if is_alternating and i > 0:
+                    source_word = remaining_words[i - 1]
+                    source_letters = get_letters(source_word)
+
+                    if source_word.lower() not in words_used_by_parts and source_letters and needed_letters:
+                        # Try odd letters (positions 0, 2, 4... = 1st, 3rd, 5th...)
+                        odd_letters = ''.join(
+                            source_letters[j] for j in range(0, len(source_letters), 2))
+                        # Try even letters (positions 1, 3, 5... = 2nd, 4th, 6th...)
+                        even_letters = ''.join(
+                            source_letters[j] for j in range(1, len(source_letters), 2))
+
+                        extracted = None
+                        extract_desc = None
+
+                        # Check which works with needed_letters
+                        temp_needed = list(needed_letters)
+                        odd_works = True
+                        for c in odd_letters:
+                            if c in temp_needed:
+                                temp_needed.remove(c)
+                            else:
+                                odd_works = False
+                                break
+
+                        temp_needed = list(needed_letters)
+                        even_works = True
+                        for c in even_letters:
+                            if c in temp_needed:
+                                temp_needed.remove(c)
+                            else:
+                                even_works = False
+                                break
+
+                        if odd_works:
+                            extracted = odd_letters
+                            extract_desc = 'odd letters of'
+                        elif even_works:
+                            extracted = even_letters
+                            extract_desc = 'even letters of'
+
+                        if extracted and extract_desc:
+                            ind_display = f"{word} {remaining_words[i + 1]}"
+                            parts_found.append({
+                                'indicator': ind_display,
+                                'indicator_words': [word, remaining_words[i + 1]],
+                                'source_word': source_word,
+                                'extracted_letter': extracted,
+                                'subtype': f"{subtype} (alternating)",
+                                'is_delete': False
+                            })
+                            words_used_by_parts.update(
+                                [word.lower(), remaining_words[i + 1].lower(),
+                                 source_word.lower()])
+                            # Update needed letters
+                            for c in extracted:
+                                needed_letters = needed_letters.replace(c, '', 1)
+                            continue  # Skip other handling
 
                 # ACROSTIC: Extract first letter from EACH subsequent word
                 # "leaders in Oslo will expect results" -> O+W+E+R
@@ -1680,10 +1808,16 @@ class CompoundWordplayAnalyzer:
 
             if part.get('is_delete'):
                 # DELETE operation: add source word as truncated fodder
-                delete_type = 'last' if 'last' in part['subtype'].lower() else 'first'
+                subtype_lower = part['subtype'].lower()
+                if 'outer' in subtype_lower:
+                    delete_desc = 'minus outer letters'
+                elif 'last' in subtype_lower:
+                    delete_desc = 'minus last letter'
+                else:
+                    delete_desc = 'minus first letter'
                 word_roles.append(WordRole(
                     part['source_word'], 'fodder', part['remaining_fodder'],
-                    f"minus {delete_type} letter"
+                    delete_desc
                 ))
                 accounted_words.add(part['source_word'].lower())
 
@@ -1864,6 +1998,100 @@ class CompoundWordplayAnalyzer:
                 # Acrostics are initial-letter by definition, no subtype required
                 elif op_type in ('parts', 'acrostic'):
                     subtype = indicator_match.subtype or ''
+
+                    # Check for alternating subtypes (e.g., "regularly", "oddly", "evenly")
+                    # These extract every other letter, not first/last
+                    is_alternating = any(x in subtype.lower() for x in
+                                         ['alternate', 'odd', 'even', 'regular'])
+                    if is_alternating:
+                        try:
+                            current_idx = remaining_words.index(word)
+                            source_word = None
+                            source_letters = None
+
+                            # Try previous word first (e.g., "aunt regularly")
+                            if current_idx > 0:
+                                cand = remaining_words[current_idx - 1]
+                                if cand.lower() not in accounted_words:
+                                    source_word = cand
+                                    source_letters = get_letters(cand)
+                            # Fallback to next word
+                            if source_word is None and current_idx + 1 < len(
+                                    remaining_words):
+                                cand = remaining_words[current_idx + 1]
+                                if cand.lower() not in accounted_words:
+                                    source_word = cand
+                                    source_letters = get_letters(cand)
+
+                            if source_word and source_letters and needed_letters:
+                                # Try odd letters (positions 0, 2, 4... = 1st, 3rd, 5th...)
+                                odd_letters = ''.join(source_letters[i] for i in
+                                                      range(0, len(source_letters), 2))
+                                # Try even letters (positions 1, 3, 5... = 2nd, 4th, 6th...)
+                                even_letters = ''.join(source_letters[i] for i in
+                                                       range(1, len(source_letters), 2))
+
+                                extracted = None
+                                extract_desc = None
+
+                                # Check which works with needed_letters
+                                temp_needed = list(needed_letters)
+                                odd_works = True
+                                for c in odd_letters:
+                                    if c in temp_needed:
+                                        temp_needed.remove(c)
+                                    else:
+                                        odd_works = False
+                                        break
+
+                                temp_needed = list(needed_letters)
+                                even_works = True
+                                for c in even_letters:
+                                    if c in temp_needed:
+                                        temp_needed.remove(c)
+                                    else:
+                                        even_works = False
+                                        break
+
+                                if odd_works:
+                                    extracted = odd_letters
+                                    extract_desc = 'odd letters of'
+                                elif even_works:
+                                    extracted = even_letters
+                                    extract_desc = 'even letters of'
+
+                                if extracted and extract_desc:
+                                    # Add indicator
+                                    word_roles.append(WordRole(
+                                        word, 'alternating_indicator', '',
+                                        f"database ({subtype or 'alternating'})"
+                                    ))
+                                    accounted_words.add(word_lower)
+
+                                    # Add source word
+                                    word_roles.append(WordRole(
+                                        source_word, 'substitution', extracted,
+                                        f"{extract_desc} {source_word}"
+                                    ))
+                                    accounted_words.add(source_word.lower())
+
+                                    # Add to substitutions
+                                    found_substitutions.append((
+                                        source_word,
+                                        SubstitutionMatch(
+                                            word=source_word,
+                                            letters=extracted,
+                                            category=extract_desc
+                                        )
+                                    ))
+
+                                    # Update needed letters
+                                    for c in extracted:
+                                        needed_letters = needed_letters.replace(c, '', 1)
+                                    continue
+                        except ValueError:
+                            pass
+
                     # Find adjacent word in remaining_words to operate on
                     # For 'last'/'final' indicators, prefer PREVIOUS word (e.g., "Detainee finally")
                     # For 'first'/'initial'/acrostic indicators, prefer NEXT word (e.g., "initially Detainee")
@@ -1873,26 +2101,217 @@ class CompoundWordplayAnalyzer:
                         source_letters = None
 
                         is_last_type = 'last' in subtype.lower() or subtype.lower() == 'final'
+                        is_first_type = 'first' in subtype.lower() or subtype.lower() == 'initial' or op_type == 'acrostic'
 
+                        # MULTI-WORD EXTRACTION: Try extracting last/first letters from multiple words
+                        # For last letters: "Finally you went" → U + T (subsequent words)
+                        # For first letters: "only matter initially" → O + M (previous words)
+                        if is_last_type and current_idx + 1 < len(remaining_words):
+                            # Try extracting last letters from subsequent unresolved words
+                            multi_letters = ''
+                            multi_sources = []
+                            for j in range(current_idx + 1, len(remaining_words)):
+                                src = remaining_words[j]
+                                src_letters = get_letters(src)
+                                if not src_letters:
+                                    continue
+                                if src.lower() in accounted_words:
+                                    continue
+                                last_char = src_letters[-1].upper()
+                                if last_char in needed_letters:
+                                    # Verify this specific letter is still needed
+                                    temp = needed_letters
+                                    for c in multi_letters + last_char:
+                                        temp = temp.replace(c, '', 1)
+                                    if len(temp) < len(needed_letters) - len(
+                                            multi_letters):
+                                        multi_letters += last_char
+                                        multi_sources.append(src)
+                                else:
+                                    break  # Stop at first word that doesn't contribute
+
+                            if len(multi_letters) >= 2:
+                                # Successfully extracted multiple last letters
+                                word_roles.append(WordRole(
+                                    word, 'parts_indicator', '',
+                                    f"database ({subtype})"
+                                ))
+                                accounted_words.add(word_lower)
+
+                                # Add source words
+                                word_roles.append(WordRole(
+                                    ' '.join(multi_sources), 'substitution',
+                                    multi_letters,
+                                    'last letters of'
+                                ))
+                                for src in multi_sources:
+                                    accounted_words.add(src.lower())
+                                    words_used_by_parts.add(src.lower())
+
+                                # Add to substitutions
+                                found_substitutions.append((
+                                    ' '.join(multi_sources),
+                                    SubstitutionMatch(
+                                        word=' '.join(multi_sources),
+                                        letters=multi_letters,
+                                        category='last letters of'
+                                    )
+                                ))
+
+                                # Update needed letters
+                                for c in multi_letters:
+                                    needed_letters = needed_letters.replace(c, '', 1)
+                                continue  # Skip single-word handling
+
+                        elif is_first_type and current_idx > 0:
+                            # Try extracting first letters from previous unresolved words
+                            # "only matter initially" → O + M
+                            multi_letters = ''
+                            multi_sources = []
+                            # Find consecutive unaccounted words before the indicator
+                            start_idx = current_idx - 1
+                            while start_idx >= 0:
+                                src = remaining_words[start_idx]
+                                if src.lower() in accounted_words:
+                                    break
+                                start_idx -= 1
+                            start_idx += 1  # Move back to first unaccounted word
+
+                            # Now iterate forward from start_idx to current_idx
+                            for j in range(start_idx, current_idx):
+                                src = remaining_words[j]
+                                src_letters = get_letters(src)
+                                if not src_letters:
+                                    continue
+                                if src.lower() in accounted_words:
+                                    continue
+                                first_char = src_letters[0].upper()
+                                if first_char in needed_letters:
+                                    # Verify this specific letter is still needed
+                                    temp = needed_letters
+                                    for c in multi_letters + first_char:
+                                        temp = temp.replace(c, '', 1)
+                                    if len(temp) < len(needed_letters) - len(
+                                            multi_letters):
+                                        multi_letters += first_char
+                                        multi_sources.append(src)
+                                else:
+                                    break  # Stop at first word that doesn't contribute
+
+                            if len(multi_letters) >= 2:
+                                # Successfully extracted multiple first letters
+                                word_roles.append(WordRole(
+                                    word, 'parts_indicator', '',
+                                    f"database ({subtype})"
+                                ))
+                                accounted_words.add(word_lower)
+
+                                # Add source words
+                                word_roles.append(WordRole(
+                                    ' '.join(multi_sources), 'substitution',
+                                    multi_letters,
+                                    'first letters of'
+                                ))
+                                for src in multi_sources:
+                                    accounted_words.add(src.lower())
+                                    words_used_by_parts.add(src.lower())
+
+                                # Add to substitutions
+                                found_substitutions.append((
+                                    ' '.join(multi_sources),
+                                    SubstitutionMatch(
+                                        word=' '.join(multi_sources),
+                                        letters=multi_letters,
+                                        category='first letters of'
+                                    )
+                                ))
+
+                                # Update needed letters
+                                for c in multi_letters:
+                                    needed_letters = needed_letters.replace(c, '', 1)
+                                continue  # Skip single-word handling
+
+                        # SINGLE-WORD EXTRACTION: Build list of candidate source words in preference order
+                        candidate_indices = []
+                        # Prepositions to skip as source words - they link indicators to actual sources
+                        skip_prepositions = {'from', 'of', 'in', 'with', 'by', 'for',
+                                             'to', 'at'}
                         if is_last_type:
-                            # For 'finally'/'last', try previous word first
+                            # For 'finally'/'last', try previous word first, then next, then further out
                             if current_idx > 0:
-                                source_word = remaining_words[current_idx - 1]
-                                source_letters = get_letters(source_word)
-                            # Fallback to next word
-                            if source_word is None and current_idx + 1 < len(
-                                    remaining_words):
-                                source_word = remaining_words[current_idx + 1]
-                                source_letters = get_letters(source_word)
-                        else:
-                            # For 'initially'/'first'/acrostic, try next word first
+                                candidate_indices.append(current_idx - 1)
                             if current_idx + 1 < len(remaining_words):
-                                source_word = remaining_words[current_idx + 1]
-                                source_letters = get_letters(source_word)
-                            # Fallback to previous word
-                            if source_word is None and current_idx > 0:
-                                source_word = remaining_words[current_idx - 1]
-                                source_letters = get_letters(source_word)
+                                candidate_indices.append(current_idx + 1)
+                            if current_idx + 2 < len(remaining_words):
+                                candidate_indices.append(current_idx + 2)
+                        else:
+                            # For 'initially'/'first'/acrostic, try next word first, then previous
+                            if current_idx + 1 < len(remaining_words):
+                                candidate_indices.append(current_idx + 1)
+                            if current_idx + 2 < len(remaining_words):
+                                candidate_indices.append(current_idx + 2)
+                            if current_idx > 0:
+                                candidate_indices.append(current_idx - 1)
+
+                        # Try each candidate, use first one whose extracted letter is in needed_letters
+                        # Skip short words (3 letters or less) as they're likely full substitutes
+                        for cand_idx in candidate_indices:
+                            cand_word = remaining_words[cand_idx]
+                            cand_letters = get_letters(cand_word)
+                            if not cand_letters:
+                                continue
+                            # Skip if already accounted for
+                            if cand_word.lower() in accounted_words:
+                                continue
+                            # Skip prepositions - they link indicators to sources, not sources themselves
+                            if cand_word.lower().rstrip(',.;:') in skip_prepositions:
+                                continue
+                            # Skip very short words - they're likely used as full substitutes, not for extraction
+                            if len(cand_letters) <= 3:
+                                continue
+                            # Check if extracted letter would be useful
+                            if is_last_type:
+                                test_letter = cand_letters[-1] if cand_letters else ''
+                            else:
+                                test_letter = cand_letters[0] if cand_letters else ''
+                            if test_letter and needed_letters and test_letter in needed_letters:
+                                source_word = cand_word
+                                source_letters = cand_letters
+                                break
+
+                        # Fallback: if no long candidate matched, try short words too
+                        if source_word is None and candidate_indices:
+                            for cand_idx in candidate_indices:
+                                cand_word = remaining_words[cand_idx]
+                                cand_letters = get_letters(cand_word)
+                                if not cand_letters:
+                                    continue
+                                if cand_word.lower() in accounted_words:
+                                    continue
+                                # Skip prepositions
+                                if cand_word.lower().rstrip(',.;:') in skip_prepositions:
+                                    continue
+                                if is_last_type:
+                                    test_letter = cand_letters[-1] if cand_letters else ''
+                                else:
+                                    test_letter = cand_letters[0] if cand_letters else ''
+                                if test_letter and needed_letters and test_letter in needed_letters:
+                                    source_word = cand_word
+                                    source_letters = cand_letters
+                                    break
+
+                        # Final fallback: if nothing matched needed_letters, use first available
+                        if source_word is None and candidate_indices:
+                            for cand_idx in candidate_indices:
+                                cand_word = remaining_words[cand_idx]
+                                cand_letters = get_letters(cand_word)
+                                # Skip prepositions even in final fallback
+                                if cand_word.lower().rstrip(',.;:') in skip_prepositions:
+                                    continue
+                                if cand_letters and cand_word.lower() not in accounted_words:
+                                    source_word = cand_word
+                                    source_letters = cand_letters
+                                    break
 
                         if source_word and source_letters:
 
@@ -1952,15 +2371,67 @@ class CompoundWordplayAnalyzer:
                             # EXTRACT operation (extract letter as substitution)
                             elif needed_letters:
                                 extracted_letter = None
+                                extracted_letters = None  # For outer/extremes (multiple letters)
 
+                                # Check 'outer'/'extremes' - extract BOTH first and last letters
+                                if (any(x in subtype.lower() for x in
+                                        ['outer', 'extreme', 'border', 'edge'])
+                                        and source_letters and len(source_letters) >= 2):
+                                    extracted_letters = source_letters[0] + \
+                                                        source_letters[-1]
                                 # Check 'last'/'final' FIRST so subtype takes precedence over acrostic default
-                                if (
+                                elif (
                                         'last' in subtype.lower() or subtype.lower() == 'final') and source_letters:
                                     extracted_letter = source_letters[-1]
                                 elif (
                                         'first' in subtype.lower() or subtype.lower() == 'initial'
                                         or op_type == 'acrostic') and source_letters:
                                     extracted_letter = source_letters[0]
+
+                                # Handle outer/extremes case (two letters)
+                                if extracted_letters:
+                                    # Check both letters are in needed_letters
+                                    temp_needed = list(needed_letters)
+                                    can_use = True
+                                    for c in extracted_letters:
+                                        if c in temp_needed:
+                                            temp_needed.remove(c)
+                                        else:
+                                            can_use = False
+                                            break
+
+                                    if can_use:
+                                        # Add indicator
+                                        word_roles.append(WordRole(
+                                            word, 'parts_indicator', '',
+                                            f"database ({subtype})"
+                                        ))
+                                        accounted_words.add(word_lower)
+
+                                        # Add source word
+                                        word_roles.append(WordRole(
+                                            source_word, 'substitution',
+                                            extracted_letters,
+                                            'first and last letters of'
+                                        ))
+                                        accounted_words.add(source_word.lower())
+                                        words_used_by_parts.add(source_word.lower())
+
+                                        # Add to substitutions
+                                        found_substitutions.append((
+                                            source_word,
+                                            SubstitutionMatch(
+                                                word=source_word,
+                                                letters=extracted_letters,
+                                                category='first and last letters of'
+                                            )
+                                        ))
+
+                                        # Update needed letters
+                                        for c in extracted_letters:
+                                            needed_letters = needed_letters.replace(c, '',
+                                                                                    1)
+                                        continue
 
                                 if extracted_letter and extracted_letter in needed_letters:
                                     # Add indicator
@@ -2215,16 +2686,21 @@ class CompoundWordplayAnalyzer:
 
             # Check for substitution
             # Pass needed_letters length so we can find longer synonyms when needed
+            # When deletion indicators are present, allow longer synonyms (they'll be shortened by deletion)
             # Strip possessives for lookup (editor's -> editor)
+            has_deletion_indicator = any(
+                i.wordplay_type == 'deletion' for w, i in operation_indicators)
+            # Allow 2 extra letters if deletion is involved (e.g., YEARNS -> YARNS)
+            synonym_length_limit = len(
+                needed_letters) + 2 if has_deletion_indicator else len(needed_letters)
             word_for_lookup = re.sub(r"[''\u2019]s$", "", word, flags=re.IGNORECASE)
             subs = self.db.lookup_substitution(word_for_lookup,
-                                               max_synonym_length=len(needed_letters))
+                                               max_synonym_length=synonym_length_limit)
             # Also try the full word (with apostrophe removed but 's kept) for cases like "dad's" -> "dads" -> PAS
             word_full = ''.join(c for c in word if c.isalpha())
             if word_full.lower() != word_for_lookup.lower():
                 subs_full = self.db.lookup_substitution(word_full,
-                                                        max_synonym_length=len(
-                                                            needed_letters))
+                                                        max_synonym_length=synonym_length_limit)
                 # Add any new substitutions not already found
                 existing_letters = {s.letters.upper() for s in subs}
                 for s in subs_full:
@@ -2235,19 +2711,54 @@ class CompoundWordplayAnalyzer:
                 sub_letters = sub.letters.upper()
                 temp_needed = list(needed_letters)
                 can_use = True
+                excess_letters = []
+                deletion_source_word = None
                 for c in sub_letters:
                     if c in temp_needed:
                         temp_needed.remove(c)
                     else:
+                        # Letter not needed - could be deleted if deletion indicator present
+                        if has_deletion_indicator:
+                            excess_letters.append(c)
+                        else:
+                            can_use = False
+                            break
+
+                # If we have excess letters and deletion indicators, check if excess can be deleted
+                if can_use and excess_letters and has_deletion_indicator:
+                    # Look for unresolved words that could provide the excess letters for deletion
+                    excess_str = ''.join(sorted(excess_letters))
+                    can_delete_excess = False
+
+                    # Check if any unresolved word provides exactly the excess letters
+                    for other_word in remaining_words:
+                        if other_word.lower() in accounted_words:
+                            continue
+                        if other_word.lower() == word_lower:
+                            continue
+                        # Check single-letter substitutions
+                        other_subs = self.db.lookup_substitution(
+                            other_word.lower().rstrip(',.;:'), max_synonym_length=3)
+                        for other_sub in other_subs:
+                            if other_sub.letters.upper() == excess_str:
+                                can_delete_excess = True
+                                deletion_source_word = other_word
+                                break
+                        if can_delete_excess:
+                            break
+
+                    if not can_delete_excess:
                         can_use = False
-                        break
+
                 if can_use:
                     # In charade clues (no container/insertion), reject substitutions
                     # whose letters are scattered in the answer (e.g., GET in DETERGENT).
                     # Each charade piece must be a contiguous substring of the answer.
+                    # BUT: skip this check if we have excess letters that will be deleted
                     if not has_container_insertion and len(
-                            sub_letters) > 1 and sub_letters not in answer_upper:
-                        continue
+                            sub_letters) > 1 and not excess_letters:
+                        if sub_letters not in answer_upper:
+                            continue
                     # Skip if this substitution is in the exclusion set (backtracking)
                     if skip_substitutions and (word_lower,
                                                sub_letters) in skip_substitutions:
@@ -2261,6 +2772,15 @@ class CompoundWordplayAnalyzer:
                     # Update needed letters
                     for c in sub_letters:
                         needed_letters = needed_letters.replace(c, '', 1)
+
+                    # If we used deletion to handle excess letters, account for the deletion source
+                    if excess_letters and deletion_source_word:
+                        excess_str = ''.join(excess_letters)
+                        word_roles.append(WordRole(
+                            deletion_source_word, 'deletion_target', excess_str,
+                            f'deleted from {word} → {sub_letters}'
+                        ))
+                        accounted_words.add(deletion_source_word.lower())
 
                     # Check for adjacent positional/insertion indicator
                     # This claims words like "in" as positional indicators for the substitution
@@ -2305,7 +2825,10 @@ class CompoundWordplayAnalyzer:
             for phrase_len in range(2, max_phrase_len + 1):
                 for i in range(len(remaining_words) - phrase_len + 1):
                     phrase_words = remaining_words[i:i + phrase_len]
-                    phrase_words_lower = [w.lower() for w in phrase_words]
+                    # Strip possessives from phrase words (guy's -> guy)
+                    phrase_words_lower = [
+                        re.sub(r"[''\u2019]s$", "", w.lower(), flags=re.IGNORECASE) for w
+                        in phrase_words]
 
                     # Check which phrase words are already claimed
                     blocked_by_non_sub = False
@@ -2475,7 +2998,9 @@ class CompoundWordplayAnalyzer:
                 deletion_desc = ''
 
                 # "half" indicators - take first or second half
-                if 'half' in del_word_norm or 'half' in del_subtype:
+                # Only applies to words with even number of letters
+                if ('half' in del_word_norm or 'half' in del_subtype) and len(
+                        unres_letters) % 2 == 0:
                     half_len = len(unres_letters) // 2
                     first_half = unres_letters[:half_len].upper()
                     second_half = unres_letters[half_len:].upper()

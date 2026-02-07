@@ -29,8 +29,10 @@ from solver.wordplay.anagram.compound_wordplay_analyzer import (
 from solver.wordplay.general.unified_explanation_builder import ExplanationBuilder
 
 # Database paths
-PIPELINE_DB_PATH = Path(r'C:\Users\shute\PycharmProjects\cryptic_solver\data\pipeline_stages.db')
-CRYPTIC_DB_PATH = Path(r'C:\Users\shute\PycharmProjects\cryptic_solver\data\cryptic_new.db')
+PIPELINE_DB_PATH = Path(
+    r'C:\Users\shute\PycharmProjects\cryptic_solver\data\pipeline_stages.db')
+CRYPTIC_DB_PATH = Path(
+    r'C:\Users\shute\PycharmProjects\cryptic_solver\data\cryptic_new.db')
 
 # Output path
 REPORT_PATH = Path(r'C:\Users\shute\PycharmProjects\cryptic_solver\solver'
@@ -76,7 +78,8 @@ def init_general_table():
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_general_run ON stage_general(run_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_general_clue ON stage_general(clue_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_general_clue ON stage_general(clue_id)")
 
     conn.commit()
     conn.close()
@@ -103,14 +106,26 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
     Load clues for general wordplay analysis from TWO sources:
     1. stage_anagram WHERE hit_found = 0 (no anagram evidence at all)
     2. stage_compound WHERE fully_resolved = 0 (anagram evidence didn't help)
-    
+
+    EXCLUDES clues already solved by DD or lurker stages.
     Also joins with stage_definition to get definition support data.
     """
     conn = get_pipeline_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    # Source 1: No anagram evidence
+    # First, get clue_ids already solved by DD or lurker
+    cursor.execute("""
+        SELECT clue_id FROM stage_dd WHERE run_id = ? AND hit_found = 1
+        UNION
+        SELECT clue_id FROM stage_lurker WHERE run_id = ? AND hit_found = 1
+    """, (run_id, run_id))
+    excluded_ids = {row['clue_id'] for row in cursor.fetchall()}
+
+    if excluded_ids:
+        print(f"  Excluding {len(excluded_ids)} clues already solved by DD/lurker")
+
+    # Source 1: No anagram evidence (excluding DD/lurker hits)
     cursor.execute("""
         SELECT 
             a.clue_id,
@@ -125,9 +140,10 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
         WHERE a.run_id = ? AND a.hit_found = 0
         ORDER BY a.clue_id
     """, (run_id,))
-    anagram_rows = cursor.fetchall()
+    anagram_rows = [row for row in cursor.fetchall() if
+                    row['clue_id'] not in excluded_ids]
 
-    # Source 2: Compound rejects and weak partial anagrams
+    # Source 2: Compound rejects and weak partial anagrams (excluding DD/lurker hits)
     cursor.execute("""
         SELECT 
             c.clue_id,
@@ -141,7 +157,8 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
         WHERE c.run_id = ? AND c.fully_resolved IN (0, 2)
         ORDER BY c.clue_id
     """, (run_id,))
-    compound_rows = cursor.fetchall()
+    compound_rows = [row for row in cursor.fetchall() if
+                     row['clue_id'] not in excluded_ids]
 
     conn.close()
 
@@ -167,7 +184,8 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
 
         # Parse JSON fields safely
         try:
-            record['unused_words'] = json.loads(row['unused_words'] or '[]') if 'unused_words' in row.keys() else []
+            record['unused_words'] = json.loads(
+                row['unused_words'] or '[]') if 'unused_words' in row.keys() else []
         except (json.JSONDecodeError, KeyError):
             record['unused_words'] = []
 
@@ -205,7 +223,8 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
             results.append(rec)
 
     compound_reject_count = len(results) - anagram_miss_count
-    print(f"  Sources: {anagram_miss_count} anagram misses + {compound_reject_count} compound rejects")
+    print(
+        f"  Sources: {anagram_miss_count} anagram misses + {compound_reject_count} compound rejects")
 
     return results
 
@@ -214,7 +233,8 @@ def load_non_anagram_clues(run_id: int = 0) -> List[Dict[str, Any]]:
 # STAGE: Definition finding
 # ======================================================================
 
-def find_definition_window(answer: str, clue_text: str, support: Dict[str, Any]) -> Optional[str]:
+def find_definition_window(answer: str, clue_text: str, support: Dict[str, Any]) -> \
+Optional[str]:
     """Find the definition window for a given answer."""
     answer_upper = answer.upper().replace(' ', '')
 
@@ -358,7 +378,7 @@ class GeneralWordplayAnalyzer:
                         break
 
         remaining_words = [w for w in clue_words
-                          if w.lower() not in accounted_words]
+                           if w.lower() not in accounted_words]
 
         compound_solution = None
         if remaining_words:
@@ -375,12 +395,13 @@ class GeneralWordplayAnalyzer:
             # RETRY: If letters still needed and indicators were assigned,
             # retry with those indicators skipped so they can be tried as synonyms
             if (compound_solution and
-                compound_solution.get('letters_still_needed') and
-                compound_solution.get('operation_indicators')):
+                    compound_solution.get('letters_still_needed') and
+                    compound_solution.get('operation_indicators')):
 
                 # Collect indicator words to skip
                 skip_words = set()
-                for ind_word, ind_type, ind_subtype in compound_solution['operation_indicators']:
+                for ind_word, ind_type, ind_subtype in compound_solution[
+                    'operation_indicators']:
                     for w in ind_word.split():
                         skip_words.add(w.lower())
 
@@ -390,8 +411,10 @@ class GeneralWordplayAnalyzer:
                 if definition_window:
                     for w in definition_window.split():
                         for cw in clue_words:
-                            if cw.lower().strip('.,;:!?"\'') == w.lower().strip('.,;:!?"\''):
-                                word_roles_retry.append(WordRole(cw, 'definition', answer, 'pipeline'))
+                            if cw.lower().strip('.,;:!?"\'') == w.lower().strip(
+                                    '.,;:!?"\''):
+                                word_roles_retry.append(
+                                    WordRole(cw, 'definition', answer, 'pipeline'))
                                 accounted_retry.add(cw.lower())
                                 break
 
@@ -501,7 +524,7 @@ def write_puzzle_report(run_id: int = 0):
 
     # ---- Lurker hits ----
     cursor.execute("""
-        SELECT clue_id, clue_text, answer, lurker_answer, container_text
+        SELECT clue_id, clue_text, answer, lurker_answer, container_text, start_pos, end_pos
         FROM stage_lurker WHERE run_id = ? AND hit_found = 1
         ORDER BY clue_id
     """, (run_id,))
@@ -542,7 +565,8 @@ def write_puzzle_report(run_id: int = 0):
     compound_partial = [r for r in compound_rows if r['fully_resolved'] != 1]
     general_solved = [r for r in general_rows if r['fully_resolved'] == 1]
     general_partial = [r for r in general_rows if r['fully_resolved'] != 1]
-    total_solved = len(dd_hits) + len(lurker_hits) + len(compound_solved) + len(general_solved)
+    total_solved = len(dd_hits) + len(lurker_hits) + len(compound_solved) + len(
+        general_solved)
 
     # Build report
     lines = []
@@ -588,7 +612,27 @@ def write_puzzle_report(run_id: int = 0):
             lines.append(f"")
             lines.append(f"  CLUE: {row['clue_text']}")
             lines.append(f"  ANSWER: {row['lurker_answer']}")
-            lines.append(f"  HIDDEN IN: {row['container_text']}")
+
+            # Build "HIDDEN IN" display from clue text and span positions
+            hidden_display = row['container_text'] or ''
+            start_pos = row['start_pos'] if row['start_pos'] is not None else -1
+            end_pos = row['end_pos'] if row['end_pos'] is not None else -1
+
+            if start_pos >= 0 and end_pos > start_pos:
+                # Extract letters-only from clue (matching lurker detection logic)
+                clue_text = row['clue_text'] or ''
+                # Remove enumeration
+                clue_no_enum = re.sub(r'\s*\([\d,]+\)\s*$', '', clue_text)
+                letters_only = ''.join(c for c in clue_no_enum if c.isalpha())
+
+                # Build display: lowercase before, UPPERCASE hidden, lowercase after
+                if end_pos <= len(letters_only):
+                    before = letters_only[:start_pos].lower()
+                    hidden = letters_only[start_pos:end_pos].upper()
+                    after = letters_only[end_pos:].lower()
+                    hidden_display = f"{before}{hidden}{after}"
+
+            lines.append(f"  HIDDEN IN: {hidden_display}")
 
     # ---- Compound (anagram-based) section ----
     if compound_rows:
@@ -667,7 +711,8 @@ def run_general_analysis(run_id: int = 0):
     init_general_table()
     clear_stage_general(run_id)
 
-    print(f"\nLoading clues for general analysis (anagram misses + compound rejects, run_id={run_id})...")
+    print(
+        f"\nLoading clues for general analysis (anagram misses + compound rejects, run_id={run_id})...")
     non_anagram_clues = load_non_anagram_clues(run_id)
     print(f"  Total: {len(non_anagram_clues)} clues for general wordplay")
 
