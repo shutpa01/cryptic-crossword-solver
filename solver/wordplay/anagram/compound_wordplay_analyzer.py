@@ -1513,6 +1513,12 @@ class CompoundWordplayAnalyzer:
                                                         indicator_match)
                 words_used_by_two_word_indicators.add(word1.lower())
                 words_used_by_two_word_indicators.add(word2.lower())
+            elif indicator_match and indicator_match.wordplay_type in ('acrostic',
+                                                                       'parts'):
+                # Protect two-word acrostic/parts indicators like "leaders in"
+                # They'll be processed later, but we need to prevent single-word matching
+                words_used_by_two_word_indicators.add(word1.lower())
+                words_used_by_two_word_indicators.add(word2.lower())
 
         # Now check single-word indicators, but skip words already used in two-word indicators
         for i, word in enumerate(remaining_words):
@@ -2325,6 +2331,24 @@ class CompoundWordplayAnalyzer:
                                 elif 'last' in subtype.lower() or subtype.lower() == 'final':
                                     remaining_fodder = source_letters[
                                                        :-1]  # Remove last letter
+                                elif 'middle' in subtype.lower() or 'heart' in subtype.lower() or 'core' in subtype.lower():
+                                    # Remove middle letter(s)
+                                    if len(source_letters) >= 3:
+                                        mid = len(source_letters) // 2
+                                        if len(source_letters) % 2 == 1:
+                                            # Odd length: remove single middle letter
+                                            remaining_fodder = source_letters[
+                                                               :mid] + source_letters[
+                                                                       mid + 1:]
+                                        else:
+                                            # Even length: remove two middle letters
+                                            remaining_fodder = source_letters[
+                                                               :mid - 1] + source_letters[
+                                                                           mid + 1:]
+                                elif 'outer' in subtype.lower():
+                                    # Remove first AND last letters
+                                    if len(source_letters) >= 3:
+                                        remaining_fodder = source_letters[1:-1]
 
                                 if remaining_fodder:
                                     # Check if remaining letters contribute to needed_letters
@@ -2340,8 +2364,15 @@ class CompoundWordplayAnalyzer:
 
                                     if can_use or not needed_letters:
                                         # Add indicator
-                                        delete_type = 'last' if (
-                                                'last' in subtype.lower() or subtype.lower() == 'final') else 'first'
+                                        subtype_lower = subtype.lower()
+                                        if 'last' in subtype_lower or subtype_lower == 'final':
+                                            delete_desc = 'minus last letter'
+                                        elif 'middle' in subtype_lower or 'heart' in subtype_lower or 'core' in subtype_lower:
+                                            delete_desc = 'minus middle letter'
+                                        elif 'outer' in subtype_lower:
+                                            delete_desc = 'minus outer letters'
+                                        else:
+                                            delete_desc = 'minus first letter'
                                         word_roles.append(WordRole(
                                             word, 'parts_indicator', '',
                                             f"database ({subtype})"
@@ -2351,7 +2382,7 @@ class CompoundWordplayAnalyzer:
                                         # Add source word as truncated fodder
                                         word_roles.append(WordRole(
                                             source_word, 'fodder', remaining_fodder,
-                                            f"minus {delete_type} letter"
+                                            delete_desc
                                         ))
                                         accounted_words.add(source_word.lower())
                                         words_used_by_parts.add(source_word.lower())
@@ -2470,7 +2501,7 @@ class CompoundWordplayAnalyzer:
 
                 # Handle alternating letter indicators (like "regularly", "oddly", "evenly")
                 # Extracts every other letter from adjacent word
-                elif op_type == 'alternating':
+                elif op_type in ('alternating', 'alternate'):
                     subtype = indicator_match.subtype or ''
                     try:
                         current_idx = remaining_words.index(word)
@@ -3068,6 +3099,31 @@ class CompoundWordplayAnalyzer:
                         if can_use:
                             candidate_letters = remaining
                             deletion_desc = 'minus ends'
+
+                # "middle" / "heart" / "core" / "heartless" / "gutless" indicators - remove middle letter(s)
+                elif any(x in del_subtype for x in
+                         ['middle', 'heart', 'core', 'gut', 'centre', 'center']):
+                    if len(unres_letters) >= 3:
+                        mid = len(unres_letters) // 2
+                        if len(unres_letters) % 2 == 1:
+                            # Odd length: remove single middle letter
+                            remaining = (unres_letters[:mid] + unres_letters[
+                                                               mid + 1:]).upper()
+                        else:
+                            # Even length: remove two middle letters
+                            remaining = (unres_letters[:mid - 1] + unres_letters[
+                                                                   mid + 1:]).upper()
+                        temp_needed = needed_letters
+                        can_use = True
+                        for c in remaining:
+                            if c in temp_needed:
+                                temp_needed = temp_needed.replace(c, '', 1)
+                            else:
+                                can_use = False
+                                break
+                        if can_use:
+                            candidate_letters = remaining
+                            deletion_desc = 'minus middle letter'
 
                 if candidate_letters:
                     # Found a match! Add this word as deletion source

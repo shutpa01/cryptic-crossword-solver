@@ -1,6 +1,6 @@
 ================================================================================
 PUZZLE REPORT: telegraph #31092
-Generated: 2026-02-07 02:48:35
+Generated: 2026-02-08 01:37:19
 Total clues: 31
 ================================================================================
 
@@ -10,11 +10,11 @@ SUMMARY
   Lurkers:                  1
   Anagram/compound solved:  2
   Anagram/compound partial: 0
-  General wordplay solved:  24
-  General wordplay partial: 4
+  General wordplay solved:  25
+  General wordplay partial: 3
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             27/31
+  TOTAL SOLVED:             28/31
 
 ================================================================================
 HIDDEN WORDS (LURKERS)
@@ -280,19 +280,20 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "Grubby" = definition for UNCLEAN
     "family member" = UNCLE (database phrase (synonym))
     "aunt" = AN (first letter of)
-    "regularly ignored" = parts_indicator
+    "regularly" = letter selector
+    "ignored" = letter selector
 
   [PARTIAL] CLUE: Wide-ranging fear about old sheep (9)
   ANSWER: PANORAMIC
   DEFINITION: Wide-ranging
-  FORMULA: OR (about) + PA (old) + ? = PANORAMIC
+  FORMULA: C (about) + PA (old) + RAM (sheep) + ? = PANORAMIC
   BREAKDOWN:
     "Wide-ranging" = definition for PANORAMIC
-    "about" = OR (database (synonym))
+    "about" = C (database (single_letter))
     "old" = PA (database (synonym))
+    "sheep" = RAM (database (synonym))
     "fear" = unresolved
-    "sheep" = unresolved
-  LETTERS NEEDED: NAMIC
+  LETTERS NEEDED: NOI
 
   [SOLVED] CLUE: Call round after work to find missing peer (4,5)
   ANSWER: 
@@ -319,20 +320,19 @@ GENERAL WORDPLAY (NON-ANAGRAM)
     "help," = unresolved
     "UFO" = unresolved
 
-  [PARTIAL] CLUE: Ruler and politician admitted to base, heartless error (7)
+  [SOLVED] CLUE: Ruler and politician admitted to base, heartless error (7)
   ANSWER: EMPEROR
   DEFINITION: Ruler
-  FORMULA: MP (politician) + E (error) + ? = EMPEROR
+  FORMULA: MP (politician) + E (base,) + EROR (minus middle letter of error) = EMPEROR
   BREAKDOWN:
     "Ruler" = definition for EMPEROR
     "politician" = MP (database (abbreviation))
-    "base," = letter selector
-    "error" = E (first letter of)
-    "and" = unresolved
-    "admitted" = unresolved
-    "to" = unresolved
-    "heartless" = unresolved
-  LETTERS NEEDED: EROR
+    "base," = E (database (single_letter))
+    "heartless" = deletion indicator
+    "error" = EROR (minus middle letter of error)
+    "and" = link word
+    "admitted" = wordplay connector
+    "to" = link word
 
   [SOLVED] CLUE: Exhausted, Tallinn’s out of bounds (3,2)
   ANSWER: ALLIN
