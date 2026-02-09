@@ -308,6 +308,31 @@ class DatabaseLookup:
 
         return [(r[0], 'synonym') for r in cursor.fetchall()]
 
+    def lookup_homophone(self, word: str) -> List[str]:
+        """
+        Look up homophones for a word.
+        Returns list of words that sound like the input word.
+
+        Example: lookup_homophone('acts') -> ['ax']
+                 lookup_homophone('able') -> ['abel']
+        """
+        word_clean = ''.join(c for c in word.lower() if c.isalpha())
+
+        if not word_clean:
+            return []
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        # Look up the word in the homophones table
+        cursor.execute("""
+            SELECT homophone FROM homophones
+            WHERE LOWER(word) = ?
+        """, (word_clean,))
+
+        results = cursor.fetchall()
+        return [r[0] for r in results]
+
 
 class CompoundSolver:
     """
@@ -1495,14 +1520,34 @@ class CompoundWordplayAnalyzer:
 
         # FIRST PASS: Find all insertion/container indicators in remaining_words
         # This is needed so we can check adjacency before labeling fodder
-        # IMPORTANT: Check TWO-WORD indicators FIRST to catch "found in" before "in" alone
+        # IMPORTANT: Check THREE-WORD then TWO-WORD indicators FIRST to prevent splitting
         insertion_indicators_in_remaining = {}  # position -> (word, indicator_match)
-        words_used_by_two_word_indicators = set()  # Track words used in two-word indicators
+        words_used_by_two_word_indicators = set()  # Track words used in multi-word indicators
+
+        # Check THREE-word indicators first (like "on the radio", "by the sound of it")
+        for i in range(len(remaining_words) - 2):
+            word1 = remaining_words[i]
+            word2 = remaining_words[i + 1]
+            word3 = remaining_words[i + 2]
+            three_word = f"{norm_letters(word1)} {norm_letters(word2)} {norm_letters(word3)}"
+            indicator_match = self.db.lookup_indicator(three_word)
+
+            if indicator_match and indicator_match.wordplay_type in ('homophone', 'parts',
+                                                                     'acrostic'):
+                # Protect three-word indicators from being split
+                words_used_by_two_word_indicators.add(word1.lower())
+                words_used_by_two_word_indicators.add(word2.lower())
+                words_used_by_two_word_indicators.add(word3.lower())
 
         # Check two-word container/insertion indicators first
         for i in range(len(remaining_words) - 1):
             word1 = remaining_words[i]
             word2 = remaining_words[i + 1]
+
+            # Skip if already part of a three-word indicator
+            if word1.lower() in words_used_by_two_word_indicators or word2.lower() in words_used_by_two_word_indicators:
+                continue
+
             two_word = f"{norm_letters(word1)} {norm_letters(word2)}"
             indicator_match = self.db.lookup_indicator(two_word)
 
@@ -1514,8 +1559,9 @@ class CompoundWordplayAnalyzer:
                 words_used_by_two_word_indicators.add(word1.lower())
                 words_used_by_two_word_indicators.add(word2.lower())
             elif indicator_match and indicator_match.wordplay_type in ('acrostic',
-                                                                       'parts'):
-                # Protect two-word acrostic/parts indicators like "leaders in"
+                                                                       'parts',
+                                                                       'homophone'):
+                # Protect two-word acrostic/parts/homophone indicators like "leaders in", "sounds like"
                 # They'll be processed later, but we need to prevent single-word matching
                 words_used_by_two_word_indicators.add(word1.lower())
                 words_used_by_two_word_indicators.add(word2.lower())
@@ -1538,6 +1584,191 @@ class CompoundWordplayAnalyzer:
         for i, word in enumerate(remaining_words[:-2]):
             three_word = f"{norm_letters(word)} {norm_letters(remaining_words[i + 1])} {norm_letters(remaining_words[i + 2])}"
             indicator_match = self.db.lookup_indicator(three_word)
+
+            # THREE-WORD HOMOPHONE: e.g., "on the radio", "for the audience"
+            if indicator_match and indicator_match.wordplay_type == 'homophone':
+                homophone_found = False
+                source_word = None
+
+                # Try source word BEFORE indicator first (e.g., "passage on the radio")
+                if i > 0 and not homophone_found:
+                    source_word = remaining_words[i - 1]
+                    source_letters = get_letters(source_word)
+
+                    if source_word.lower() not in words_used_by_parts and source_letters:
+                        # Strategy 1: Direct homophone lookup
+                        homophones = self.db.lookup_homophone(source_word)
+
+                        for homophone in homophones:
+                            homophone_letters = get_letters(homophone)
+
+                            temp_needed = needed_letters
+                            can_use = True
+                            for c in homophone_letters:
+                                if c in temp_needed:
+                                    temp_needed = temp_needed.replace(c, '', 1)
+                                else:
+                                    can_use = False
+                                    break
+
+                            if can_use:
+                                ind_display = f"{word} {remaining_words[i + 1]} {remaining_words[i + 2]}"
+                                parts_found.append({
+                                    'indicator': ind_display,
+                                    'indicator_words': [word, remaining_words[i + 1],
+                                                        remaining_words[i + 2]],
+                                    'source_word': source_word,
+                                    'extracted_letter': homophone_letters,
+                                    'subtype': f'homophone ({homophone})',
+                                    'is_delete': False,
+                                    'is_homophone': True
+                                })
+                                words_used_by_parts.update(
+                                    [word.lower(), remaining_words[i + 1].lower(),
+                                     remaining_words[i + 2].lower(), source_word.lower()])
+                                for c in homophone_letters:
+                                    needed_letters = needed_letters.replace(c, '', 1)
+                                homophone_found = True
+                                break
+
+                        # Strategy 2: Synonym → Homophone
+                        if not homophone_found:
+                            synonyms = self.db.lookup_substitution(source_word,
+                                                                   max_synonym_length=12)
+
+                            for syn_match in synonyms:
+                                syn_word = syn_match.letters.lower()
+                                syn_homophones = self.db.lookup_homophone(syn_word)
+
+                                for homophone in syn_homophones:
+                                    homophone_letters = get_letters(homophone)
+
+                                    temp_needed = needed_letters
+                                    can_use = True
+                                    for c in homophone_letters:
+                                        if c in temp_needed:
+                                            temp_needed = temp_needed.replace(c, '', 1)
+                                        else:
+                                            can_use = False
+                                            break
+
+                                    if can_use:
+                                        ind_display = f"{word} {remaining_words[i + 1]} {remaining_words[i + 2]}"
+                                        parts_found.append({
+                                            'indicator': ind_display,
+                                            'indicator_words': [word,
+                                                                remaining_words[i + 1],
+                                                                remaining_words[i + 2]],
+                                            'source_word': source_word,
+                                            'extracted_letter': homophone_letters,
+                                            'subtype': f'homophone ({syn_word} → {homophone})',
+                                            'is_delete': False,
+                                            'is_homophone': True
+                                        })
+                                        words_used_by_parts.update(
+                                            [word.lower(), remaining_words[i + 1].lower(),
+                                             remaining_words[i + 2].lower(),
+                                             source_word.lower()])
+                                        for c in homophone_letters:
+                                            needed_letters = needed_letters.replace(c, '',
+                                                                                    1)
+                                        homophone_found = True
+                                        break
+
+                                if homophone_found:
+                                    break
+
+                # Try source word AFTER indicator (e.g., "on the radio passage")
+                if i + 3 < len(remaining_words) and not homophone_found:
+                    source_word = remaining_words[i + 3]
+                    source_letters = get_letters(source_word)
+
+                    if source_word.lower() not in words_used_by_parts and source_letters:
+                        # Strategy 1: Direct homophone lookup
+                        homophones = self.db.lookup_homophone(source_word)
+
+                        for homophone in homophones:
+                            homophone_letters = get_letters(homophone)
+
+                            temp_needed = needed_letters
+                            can_use = True
+                            for c in homophone_letters:
+                                if c in temp_needed:
+                                    temp_needed = temp_needed.replace(c, '', 1)
+                                else:
+                                    can_use = False
+                                    break
+
+                            if can_use:
+                                ind_display = f"{word} {remaining_words[i + 1]} {remaining_words[i + 2]}"
+                                parts_found.append({
+                                    'indicator': ind_display,
+                                    'indicator_words': [word, remaining_words[i + 1],
+                                                        remaining_words[i + 2]],
+                                    'source_word': source_word,
+                                    'extracted_letter': homophone_letters,
+                                    'subtype': f'homophone ({homophone})',
+                                    'is_delete': False,
+                                    'is_homophone': True
+                                })
+                                words_used_by_parts.update(
+                                    [word.lower(), remaining_words[i + 1].lower(),
+                                     remaining_words[i + 2].lower(), source_word.lower()])
+                                for c in homophone_letters:
+                                    needed_letters = needed_letters.replace(c, '', 1)
+                                homophone_found = True
+                                break
+
+                        # Strategy 2: Synonym → Homophone
+                        if not homophone_found:
+                            synonyms = self.db.lookup_substitution(source_word,
+                                                                   max_synonym_length=12)
+
+                            for syn_match in synonyms:
+                                syn_word = syn_match.letters.lower()
+                                syn_homophones = self.db.lookup_homophone(syn_word)
+
+                                for homophone in syn_homophones:
+                                    homophone_letters = get_letters(homophone)
+
+                                    temp_needed = needed_letters
+                                    can_use = True
+                                    for c in homophone_letters:
+                                        if c in temp_needed:
+                                            temp_needed = temp_needed.replace(c, '', 1)
+                                        else:
+                                            can_use = False
+                                            break
+
+                                    if can_use:
+                                        ind_display = f"{word} {remaining_words[i + 1]} {remaining_words[i + 2]}"
+                                        parts_found.append({
+                                            'indicator': ind_display,
+                                            'indicator_words': [word,
+                                                                remaining_words[i + 1],
+                                                                remaining_words[i + 2]],
+                                            'source_word': source_word,
+                                            'extracted_letter': homophone_letters,
+                                            'subtype': f'homophone ({syn_word} → {homophone})',
+                                            'is_delete': False,
+                                            'is_homophone': True
+                                        })
+                                        words_used_by_parts.update(
+                                            [word.lower(), remaining_words[i + 1].lower(),
+                                             remaining_words[i + 2].lower(),
+                                             source_word.lower()])
+                                        for c in homophone_letters:
+                                            needed_letters = needed_letters.replace(c, '',
+                                                                                    1)
+                                        homophone_found = True
+                                        break
+
+                                if homophone_found:
+                                    break
+
+                # Mark three-word indicator as used even if no homophone found
+                if homophone_found:
+                    continue
 
             if indicator_match and indicator_match.wordplay_type == 'parts':
                 subtype = indicator_match.subtype or ''
@@ -1603,6 +1834,181 @@ class CompoundWordplayAnalyzer:
             # Check two-word combination
             two_word = f"{norm_letters(word)} {norm_letters(remaining_words[i + 1])}"
             indicator_match = self.db.lookup_indicator(two_word)
+
+            # TWO-WORD HOMOPHONE: e.g., "sounds like", "we hear"
+            if indicator_match and indicator_match.wordplay_type == 'homophone':
+                homophone_found = False
+                source_word = None
+
+                # Try source word BEFORE indicator first (e.g., "creature, we hear")
+                if i > 0 and not homophone_found:
+                    source_word = remaining_words[i - 1]
+                    source_letters = get_letters(source_word)
+
+                    if source_word.lower() not in words_used_by_parts and source_letters:
+                        # Strategy 1: Direct homophone lookup
+                        homophones = self.db.lookup_homophone(source_word)
+
+                        for homophone in homophones:
+                            homophone_letters = get_letters(homophone)
+
+                            temp_needed = needed_letters
+                            can_use = True
+                            for c in homophone_letters:
+                                if c in temp_needed:
+                                    temp_needed = temp_needed.replace(c, '', 1)
+                                else:
+                                    can_use = False
+                                    break
+
+                            if can_use:
+                                ind_display = f"{word} {remaining_words[i + 1]}"
+                                parts_found.append({
+                                    'indicator': ind_display,
+                                    'indicator_words': [word, remaining_words[i + 1]],
+                                    'source_word': source_word,
+                                    'extracted_letter': homophone_letters,
+                                    'subtype': f'homophone ({homophone})',
+                                    'is_delete': False,
+                                    'is_homophone': True
+                                })
+                                words_used_by_parts.update(
+                                    [word.lower(), remaining_words[i + 1].lower(),
+                                     source_word.lower()])
+                                for c in homophone_letters:
+                                    needed_letters = needed_letters.replace(c, '', 1)
+                                homophone_found = True
+                                break
+
+                        # Strategy 2: Synonym → Homophone
+                        if not homophone_found:
+                            synonyms = self.db.lookup_substitution(source_word,
+                                                                   max_synonym_length=12)
+
+                            for syn_match in synonyms:
+                                syn_word = syn_match.letters.lower()
+                                syn_homophones = self.db.lookup_homophone(syn_word)
+
+                                for homophone in syn_homophones:
+                                    homophone_letters = get_letters(homophone)
+
+                                    temp_needed = needed_letters
+                                    can_use = True
+                                    for c in homophone_letters:
+                                        if c in temp_needed:
+                                            temp_needed = temp_needed.replace(c, '', 1)
+                                        else:
+                                            can_use = False
+                                            break
+
+                                    if can_use:
+                                        ind_display = f"{word} {remaining_words[i + 1]}"
+                                        parts_found.append({
+                                            'indicator': ind_display,
+                                            'indicator_words': [word,
+                                                                remaining_words[i + 1]],
+                                            'source_word': source_word,
+                                            'extracted_letter': homophone_letters,
+                                            'subtype': f'homophone ({syn_word} → {homophone})',
+                                            'is_delete': False,
+                                            'is_homophone': True
+                                        })
+                                        words_used_by_parts.update(
+                                            [word.lower(), remaining_words[i + 1].lower(),
+                                             source_word.lower()])
+                                        for c in homophone_letters:
+                                            needed_letters = needed_letters.replace(c, '',
+                                                                                    1)
+                                        homophone_found = True
+                                        break
+
+                                if homophone_found:
+                                    break
+
+                # Try source word AFTER indicator (e.g., "sounds like creature")
+                if i + 2 < len(remaining_words) and not homophone_found:
+                    source_word = remaining_words[i + 2]
+                    source_letters = get_letters(source_word)
+
+                    if source_word.lower() not in words_used_by_parts and source_letters:
+                        # Strategy 1: Direct homophone lookup
+                        homophones = self.db.lookup_homophone(source_word)
+
+                        for homophone in homophones:
+                            homophone_letters = get_letters(homophone)
+
+                            temp_needed = needed_letters
+                            can_use = True
+                            for c in homophone_letters:
+                                if c in temp_needed:
+                                    temp_needed = temp_needed.replace(c, '', 1)
+                                else:
+                                    can_use = False
+                                    break
+
+                            if can_use:
+                                ind_display = f"{word} {remaining_words[i + 1]}"
+                                parts_found.append({
+                                    'indicator': ind_display,
+                                    'indicator_words': [word, remaining_words[i + 1]],
+                                    'source_word': source_word,
+                                    'extracted_letter': homophone_letters,
+                                    'subtype': f'homophone ({homophone})',
+                                    'is_delete': False,
+                                    'is_homophone': True
+                                })
+                                words_used_by_parts.update(
+                                    [word.lower(), remaining_words[i + 1].lower(),
+                                     source_word.lower()])
+                                for c in homophone_letters:
+                                    needed_letters = needed_letters.replace(c, '', 1)
+                                homophone_found = True
+                                break
+
+                        # Strategy 2: Synonym → Homophone
+                        if not homophone_found:
+                            synonyms = self.db.lookup_substitution(source_word,
+                                                                   max_synonym_length=12)
+
+                            for syn_match in synonyms:
+                                syn_word = syn_match.letters.lower()
+                                syn_homophones = self.db.lookup_homophone(syn_word)
+
+                                for homophone in syn_homophones:
+                                    homophone_letters = get_letters(homophone)
+
+                                    temp_needed = needed_letters
+                                    can_use = True
+                                    for c in homophone_letters:
+                                        if c in temp_needed:
+                                            temp_needed = temp_needed.replace(c, '', 1)
+                                        else:
+                                            can_use = False
+                                            break
+
+                                    if can_use:
+                                        ind_display = f"{word} {remaining_words[i + 1]}"
+                                        parts_found.append({
+                                            'indicator': ind_display,
+                                            'indicator_words': [word,
+                                                                remaining_words[i + 1]],
+                                            'source_word': source_word,
+                                            'extracted_letter': homophone_letters,
+                                            'subtype': f'homophone ({syn_word} → {homophone})',
+                                            'is_delete': False,
+                                            'is_homophone': True
+                                        })
+                                        words_used_by_parts.update(
+                                            [word.lower(), remaining_words[i + 1].lower(),
+                                             source_word.lower()])
+                                        for c in homophone_letters:
+                                            needed_letters = needed_letters.replace(c, '',
+                                                                                    1)
+                                        homophone_found = True
+                                        break
+
+                                if homophone_found:
+                                    break
 
             if indicator_match and indicator_match.wordplay_type in ('parts', 'acrostic'):
                 subtype = indicator_match.subtype or ''
@@ -1805,11 +2211,20 @@ class CompoundWordplayAnalyzer:
 
         # Process parts indicators found
         for part in parts_found:
+            # Check if this is a homophone entry
+            is_homophone = part.get('is_homophone', False)
+
             # Add indicator words to word_roles
             for ind_word in part['indicator_words']:
-                word_roles.append(WordRole(
-                    ind_word, 'parts_indicator', '', f"database ({part['subtype']})"
-                ))
+                if is_homophone:
+                    word_roles.append(WordRole(
+                        ind_word, 'homophone_indicator', '',
+                        f"database ({part['subtype']})"
+                    ))
+                else:
+                    word_roles.append(WordRole(
+                        ind_word, 'parts_indicator', '', f"database ({part['subtype']})"
+                    ))
                 accounted_words.add(ind_word.lower())
 
             if part.get('is_delete'):
@@ -1829,6 +2244,28 @@ class CompoundWordplayAnalyzer:
 
                 # Add to additional_fodder for formula building
                 additional_fodder.append((part['source_word'], part['remaining_fodder']))
+            elif is_homophone:
+                # HOMOPHONE operation: add source word with homophone description
+                # subtype contains something like "homophone (aisle → isle)" or "homophone (isle)"
+                homophone_desc = part['subtype']  # e.g., "homophone (aisle → isle)"
+                extracted = part['extracted_letter']
+
+                word_roles.append(WordRole(
+                    part['source_word'], 'substitution', extracted,
+                    homophone_desc
+                ))
+                accounted_words.add(part['source_word'].lower())
+
+                # Add to substitutions list for formula building
+                found_substitutions.append((
+                    part['source_word'],
+                    SubstitutionMatch(
+                        word=part['source_word'],
+                        letters=extracted,
+                        category='homophone',
+                        notes=homophone_desc
+                    )
+                ))
             else:
                 # EXTRACT operation: add source word as providing the extracted letter
                 source_desc = 'last letter of' if 'last' in part[
@@ -1987,7 +2424,7 @@ class CompoundWordplayAnalyzer:
                     skip_indicator_words and word_lower in skip_indicator_words):
                 op_type = indicator_match.wordplay_type
                 if op_type in ('insertion', 'container', 'deletion', 'reversal',
-                               'hidden'):
+                               'hidden', 'homophone'):
                     operation_indicators.append((word, indicator_match))
                     # Don't account deletion indicators yet - only account them
                     # if they're actually used with an adjacent source word
@@ -3151,6 +3588,261 @@ class CompoundWordplayAnalyzer:
                             unres_word)]
                     break  # Only process one deletion source
 
+        # ================================================================
+        # HOMOPHONE HANDLING
+        # ================================================================
+        # Check for homophone indicators and their adjacent source words
+        # Example: "sounds like acts" -> AX (homophone of ACTS)
+        homophone_indicators_found = [(w, i) for w, i in operation_indicators
+                                      if i.wordplay_type == 'homophone']
+
+        if homophone_indicators_found and needed_letters and unresolved_words:
+            # Find positions of homophone indicators in clue
+            homophone_ind_positions = {}
+            for hom_word, hom_ind in homophone_indicators_found:
+                first_word = hom_word.split()[0]
+                first_word_norm = norm_letters(first_word)
+                if first_word_norm:
+                    for idx, cw in enumerate(clue_words):
+                        if norm_letters(cw) == first_word_norm:
+                            homophone_ind_positions[idx] = (hom_word, hom_ind)
+                            break
+
+            for unres_word in list(unresolved_words):
+                unres_lower = unres_word.lower()
+                unres_letters = get_letters(unres_word)
+
+                if not unres_letters:
+                    continue
+
+                # Find position of unresolved word
+                unres_idx = None
+                for idx, cw in enumerate(clue_words):
+                    if norm_letters(cw) == norm_letters(unres_word):
+                        unres_idx = idx
+                        break
+
+                if unres_idx is None:
+                    continue
+
+                # Check if adjacent to any homophone indicator (within 2 positions)
+                adjacent_homophone = None
+                for hom_idx, (hom_word, hom_ind) in homophone_ind_positions.items():
+                    if abs(unres_idx - hom_idx) <= 2:
+                        adjacent_homophone = (hom_word, hom_ind)
+                        break
+
+                if not adjacent_homophone:
+                    continue
+
+                hom_word, hom_ind = adjacent_homophone
+
+                # Strategy 1: Direct homophone lookup
+                # e.g., "right" → RITE (if "right" is the source word)
+                homophones = self.db.lookup_homophone(unres_word)
+
+                homophone_found = False
+                for homophone in homophones:
+                    homophone_letters = get_letters(homophone)
+
+                    # Check if this homophone provides needed letters
+                    temp_needed = needed_letters
+                    can_use = True
+                    for c in homophone_letters:
+                        if c in temp_needed:
+                            temp_needed = temp_needed.replace(c, '', 1)
+                        else:
+                            can_use = False
+                            break
+
+                    if can_use:
+                        # Found a match! Add this as homophone substitution
+                        word_roles.append(WordRole(
+                            unres_word, 'substitution', homophone_letters,
+                            f'sounds like {unres_word} = {homophone}'
+                        ))
+                        accounted_words.add(unres_lower)
+
+                        # Account for the homophone indicator
+                        if hom_word.lower() not in accounted_words:
+                            word_roles.append(WordRole(
+                                hom_word, 'homophone_indicator', '', 'database'
+                            ))
+                            accounted_words.add(hom_word.lower())
+
+                        # Add to substitutions for formula building
+                        found_substitutions.append((
+                            unres_word,
+                            SubstitutionMatch(
+                                word=unres_word,
+                                letters=homophone_letters,
+                                category='homophone',
+                                notes=f'sounds like {homophone}'
+                            )
+                        ))
+
+                        # Update needed_letters
+                        for c in homophone_letters:
+                            needed_letters = needed_letters.replace(c, '', 1)
+
+                        # Remove from unresolved
+                        unresolved_words = [w for w in unresolved_words
+                                            if
+                                            norm_letters(w) != norm_letters(unres_word)]
+                        homophone_found = True
+                        break  # Found a homophone match, stop trying others
+
+                if homophone_found:
+                    continue  # Move to next unresolved word
+
+                # Strategy 2: Synonym → Homophone
+                # e.g., "creature" → MOOSE (synonym) → MOUSSE (homophone)
+                # e.g., "beautiful" → FAIR (synonym) → FARE (homophone)
+                synonyms = self.db.lookup_substitution(unres_word, max_synonym_length=12)
+
+                for syn_match in synonyms:
+                    syn_word = syn_match.letters.lower()
+                    syn_homophones = self.db.lookup_homophone(syn_word)
+
+                    for homophone in syn_homophones:
+                        homophone_letters = get_letters(homophone)
+
+                        # Check if this homophone provides needed letters
+                        temp_needed = needed_letters
+                        can_use = True
+                        for c in homophone_letters:
+                            if c in temp_needed:
+                                temp_needed = temp_needed.replace(c, '', 1)
+                            else:
+                                can_use = False
+                                break
+
+                        if can_use:
+                            # Found a match via synonym!
+                            word_roles.append(WordRole(
+                                unres_word, 'substitution', homophone_letters,
+                                f'{unres_word} = {syn_word} sounds like {homophone}'
+                            ))
+                            accounted_words.add(unres_lower)
+
+                            # Account for the homophone indicator
+                            if hom_word.lower() not in accounted_words:
+                                word_roles.append(WordRole(
+                                    hom_word, 'homophone_indicator', '', 'database'
+                                ))
+                                accounted_words.add(hom_word.lower())
+
+                            # Add to substitutions for formula building
+                            found_substitutions.append((
+                                unres_word,
+                                SubstitutionMatch(
+                                    word=unres_word,
+                                    letters=homophone_letters,
+                                    category='homophone',
+                                    notes=f'{syn_word} sounds like {homophone}'
+                                )
+                            ))
+
+                            # Update needed_letters
+                            for c in homophone_letters:
+                                needed_letters = needed_letters.replace(c, '', 1)
+
+                            # Remove from unresolved
+                            unresolved_words = [w for w in unresolved_words
+                                                if norm_letters(w) != norm_letters(
+                                    unres_word)]
+                            homophone_found = True
+                            break  # Found a homophone match
+
+                    if homophone_found:
+                        break  # Stop trying more synonyms
+
+                # If we found a homophone match for this word, continue to next unresolved
+                if unres_lower in accounted_words:
+                    continue
+
+        # ================================================================
+        # REVERSE HOMOPHONE LOOKUP (Strategy 3)
+        # ================================================================
+        # If we have a homophone indicator but still need letters:
+        # 1. Look up homophones OF THE ANSWER
+        # 2. Check if any unresolved word has a synonym matching that homophone
+        #
+        # Example: "Ceremony that's appropriate to be heard" = RITE
+        # - Homophones of RITE = [RIGHT, WRITE]
+        # - Does "appropriate" have synonym RIGHT? Yes!
+        # - So: appropriate = RIGHT sounds like RITE
+
+        if homophone_indicators_found and needed_letters and unresolved_words:
+            # Get homophones of the answer
+            answer_homophones = self.db.lookup_homophone(answer_upper.lower())
+
+            if answer_homophones:
+                # Get the first homophone indicator for attribution
+                hom_word, hom_ind = homophone_indicators_found[0]
+
+                for answer_homophone in answer_homophones:
+                    answer_homophone_upper = answer_homophone.upper()
+                    answer_homophone_letters = get_letters(answer_homophone)
+
+                    # Check if this homophone matches all needed letters
+                    if sorted(answer_homophone_letters) != sorted(needed_letters):
+                        continue
+
+                    # Now check if any unresolved word has this as a synonym
+                    for unres_word in list(unresolved_words):
+                        unres_lower = unres_word.lower()
+
+                        # Look up synonyms of the unresolved word
+                        synonyms = self.db.lookup_substitution(unres_word,
+                                                               max_synonym_length=len(
+                                                                   answer_homophone) + 2)
+
+                        for syn_match in synonyms:
+                            syn_letters = syn_match.letters.upper()
+
+                            # Check if this synonym matches the answer's homophone
+                            if syn_letters == answer_homophone_upper:
+                                # Found it! The unresolved word = synonym, which sounds like answer
+                                word_roles.append(WordRole(
+                                    unres_word, 'substitution', answer_upper,
+                                    f'{unres_word} = {syn_letters} sounds like {answer_upper}'
+                                ))
+                                accounted_words.add(unres_lower)
+
+                                # Account for the homophone indicator
+                                if hom_word.lower() not in accounted_words:
+                                    word_roles.append(WordRole(
+                                        hom_word, 'homophone_indicator', '', 'database'
+                                    ))
+                                    accounted_words.add(hom_word.lower())
+
+                                # Add to substitutions for formula building
+                                found_substitutions.append((
+                                    unres_word,
+                                    SubstitutionMatch(
+                                        word=unres_word,
+                                        letters=answer_upper,
+                                        category='homophone',
+                                        notes=f'{syn_letters} sounds like {answer_upper}'
+                                    )
+                                ))
+
+                                # Clear needed_letters since we explained the whole answer
+                                needed_letters = ''
+
+                                # Remove from unresolved
+                                unresolved_words = [w for w in unresolved_words
+                                                    if norm_letters(w) != norm_letters(
+                                        unres_word)]
+                                break
+
+                        if not needed_letters:
+                            break  # Found the explanation
+
+                    if not needed_letters:
+                        break  # Found the explanation
+
         # Reorder needed_letters to match their position in the answer.
         # replace(c,'',1) removes letters left-to-right which can jumble
         # the remainder (e.g. DRAMA minus A gives DRMA instead of DRAM).
@@ -3186,6 +3878,12 @@ class CompoundWordplayAnalyzer:
                     window = remaining_words[i:i + phrase_len]
                     # Every word in the window must be unresolved
                     if not all(w.lower() in unresolved_lower for w in window):
+                        continue
+
+                    # Skip if any word in window is part of a multi-word indicator
+                    # (e.g., don't match "the radio" when "on the radio" is a 3-word indicator)
+                    if any(w.lower() in words_used_by_two_word_indicators for w in
+                           window):
                         continue
 
                     phrase = ' '.join(w.lower() for w in window)

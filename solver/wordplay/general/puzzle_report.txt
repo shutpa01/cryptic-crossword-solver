@@ -1,390 +1,411 @@
 ================================================================================
-PUZZLE REPORT: telegraph #31092
-Generated: 2026-02-08 01:37:19
-Total clues: 31
+PUZZLE REPORT: guardian #28945
+Generated: 2026-02-09 18:16:55
+Total clues: 28
 ================================================================================
 
 SUMMARY
 ----------------------------------------
   Double definitions:       0
   Lurkers:                  1
-  Anagram/compound solved:  2
+  Anagram/compound solved:  0
   Anagram/compound partial: 0
-  General wordplay solved:  25
-  General wordplay partial: 3
+  General wordplay solved:  6
+  General wordplay partial: 21
   Definition gate failed:   0
   ---
-  TOTAL SOLVED:             28/31
+  TOTAL SOLVED:             7/28
 
 ================================================================================
 HIDDEN WORDS (LURKERS)
 ================================================================================
 
-  CLUE: Sanguine, a pigeon traps rodent (6,3)
-  ANSWER: GUINEA PIG
-  HIDDEN IN: sanGUINEAPIGeontrapsrodent
-
-================================================================================
-ANAGRAM / COMPOUND WORDPLAY
-================================================================================
-
-  [SOLVED] CLUE: Soldier must reek badly, having been injected with drug (9)
-  ANSWER: MUSKETEER|MUSKETEER
-  DEFINITION: Soldier
-  FORMULA: anagram(MUST + REEK) + E (drug) = MUSKETEER
-  BREAKDOWN:
-    • "Soldier" = definition for MUSKETEER
-    • "must" = anagram fodder
-    • "reek" = anagram fodder
-    • "badly," = anagram indicator
-    • "drug" = E (database (single_letter))
-    • "injected" = wordplay connector
-
-  [SOLVED] CLUE: Good-looking husband one’s mad to change (8)
-  ANSWER: HANDSOME|HANDSOME
-  DEFINITION: Good-looking
-  FORMULA: anagram(ONE’S + MAD) + H (husband) = HANDSOME
-  BREAKDOWN:
-    • "Good-looking" = definition for HANDSOME
-    • "husband" = H (database (single_letter))
-    • "one’s" = anagram fodder
-    • "mad" = anagram fodder
-    • "change" = anagram indicator
+  CLUE: Holed in one side, catamaran partly capsized (4)
+  ANSWER: ACED
+  HIDDEN IN: holedinonesiDECAtamaranpartlycapsized
 
 ================================================================================
 GENERAL WORDPLAY (NON-ANAGRAM)
 ================================================================================
 
-  [SOLVED] CLUE: Musical‘s enraging tune you altered (5,3,4,3)
+  [SOLVED] CLUE: Hopping mad — we get VAT on traditional British fare (4,3,3,3)
   ANSWER: 
   DEFINITION: (not found)
   FORMULA: ? = 
   BREAKDOWN:
-    "you" = anagram indicator
-    "altered" = anagram indicator
-    "Musical‘s" = unresolved
-    "enraging" = unresolved
-    "tune" = unresolved
+    "mad" = anagram indicator
+    "Hopping" = unresolved
+    "we" = unresolved
+    "get" = unresolved
+    "VAT" = unresolved
+    "on" = unresolved
+    "traditional" = unresolved
+    "British" = unresolved
+    "fare" = unresolved
 
-  [SOLVED] CLUE: Finally you went, entering pits for short periods (7)
-  ANSWER: MINUTES
-  DEFINITION: short periods
-  FORMULA: UT (you went,) + MINES (pits) = MINUTES
-  BREAKDOWN:
-    "Finally" = last letter indicator
-    "you went," = UT (last letters of)
-    "entering" = container indicator
-    "pits" = MINES (database (synonym))
-    "short" = definition for MINUTES
-    "periods" = definition for MINUTES
-    "for" = link word
-
-  [SOLVED] CLUE: One who’s pragmatic about a catalogue (7)
-  ANSWER: REALIST
-  DEFINITION: One who's pragmatic
-  FORMULA: RE (about) + A (a) + LIST (catalogue) = REALIST
-  BREAKDOWN:
-    "One" = definition for REALIST
-    "pragmatic" = definition for REALIST
-    "about" = RE (database (abbreviation))
-    "a" = A (database (single_letter))
-    "catalogue" = LIST (database (synonym))
-    "who’s" = wordplay connector
-
-  [PARTIAL] CLUE: Either way it’s unacceptable (3,2)
-  ANSWER: NOTON
-  DEFINITION: it's unacceptable
-  FORMULA: NO (way) + ? = NOT ON
-  BREAKDOWN:
-    "way" = NO (database (synonym))
-    "unacceptable" = definition for NOT ON
-    "Either" = unresolved
-    "it’s" = unresolved
-  LETTERS NEEDED: NOT
-
-  [SOLVED] CLUE: Delight and disgust when touring Ecuador’s capital (6)
-  ANSWER: APPEAL
-  DEFINITION: Delight
-  FORMULA: E (Ecuador’s) + APPAL (disgust) = APPEAL
-  BREAKDOWN:
-    "Delight" = definition for APPEAL
-    "disgust" = APPAL (database (synonym))
-    "Ecuador’s" = E (first letter of)
-    "capital" = letter selector
-    "and" = link word
-    "when" = link word
-    "touring" = wordplay connector
-
-  [SOLVED] CLUE: Upset close pal and break down (8)
+  [SOLVED] CLUE: Now their work became less acceptable (4,4)
   ANSWER: 
   DEFINITION: (not found)
   FORMULA: ? = 
   BREAKDOWN:
-    "Upset" = anagram indicator
-    "break" = anagram indicator
-    "down" = anagram indicator
-    "close" = unresolved
-    "pal" = unresolved
-    "and" = unresolved
-
-  [SOLVED] CLUE: British bad guy’s accent (6)
-  ANSWER: BROGUE
-  DEFINITION: accent
-  FORMULA: B (British) + ROGUE (bad guy) = BROGUE
-  BREAKDOWN:
-    "British" = B (database (single_letter))
-    "bad" = ROGUE (phrase "bad guy" → ROGUE)
-    "guy’s" =  ((part of "bad guy"))
-    "accent" = definition for BROGUE
-
-  [SOLVED] CLUE: Continuing exercise, chap comes in ripped (9)
-  ANSWER: PERMANENT
-  DEFINITION: Continuing
-  FORMULA: PE (exercise,) + MAN (chap) + RENT (ripped) = PERMANENT
-  BREAKDOWN:
-    "Continuing" = definition for PERMANENT
-    "exercise," = PE (database (abbreviation))
-    "chap" = MAN (database (synonym))
-    "in" = hidden indicator
-    "ripped" = RENT (database (synonym))
-    "comes" = link word
-
-  [SOLVED] CLUE: Eagerly accept the French doggy (3,2)
-  ANSWER: LAPUP
-  DEFINITION: Eagerly accept
-  FORMULA: PUP (doggy) + LA (the french) = LAP UP
-  BREAKDOWN:
-    "Eagerly" = definition for LAP UP
-    "accept" = definition for LAP UP
-    "the french" = LA (database phrase (foreign_french))
-    "doggy" = PUP (database (synonym))
-
-  [SOLVED] CLUE: Mishandles rages, suppressing extremists from Bristol (7)
-  ANSWER: FUMBLES
-  DEFINITION: Mishandles
-  FORMULA: BL (Bristol) + FUMES (rages,) = FUMBLES
-  BREAKDOWN:
-    "Mishandles" = definition for FUMBLES
-    "rages," = FUMES (database (synonym))
-    "extremists" = letter selector
-    "from" = hidden indicator
-    "Bristol" = BL (first and last letters of)
-    "suppressing" = wordplay connector
-
-  [SOLVED] CLUE: Get better free, unlimited insurance (7)
-  ANSWER: RECOVER
-  DEFINITION: Get better
-  FORMULA: COVER (insurance) + RE (minus ends of free,) = RECOVER
-  BREAKDOWN:
-    "Get" = definition for RECOVER
-    "better" = definition for RECOVER
-    "free," = RE (minus ends of free,)
-    "unlimited" = deletion indicator
-    "insurance" = COVER (database (synonym))
-
-  [SOLVED] CLUE: Ron lost chessmen, playing legend from Scotland (4,4,7)
-  ANSWER: 
-  DEFINITION: (not found)
-  FORMULA: ? = 
-  BREAKDOWN:
-    "lost" = anagram indicator
-    "playing" = anagram indicator
-    "Ron" = unresolved
-    "chessmen," = unresolved
-    "legend" = unresolved
-    "from" = unresolved
-    "Scotland" = unresolved
-
-  [SOLVED] CLUE: Country‘s opera song enthralling people (7)
-  ANSWER: ARMENIA
-  DEFINITION: country
-  FORMULA: MEN (people) + ARIA (song) = ARMENIA
-  BREAKDOWN:
-    "song" = ARIA (database (synonym))
-    "people" = MEN (database (synonym))
-    "Country‘s" = wordplay connector
-    "opera" = wordplay connector
-    "enthralling" = wordplay connector
-
-  [SOLVED] CLUE: Nine musicians? No, flipping ten (5)
-  ANSWER: 
-  DEFINITION: (not found)
-  FORMULA: ? = 
-  BREAKDOWN:
-    "Nine" = unresolved
-    "musicians?" = unresolved
-    "No," = unresolved
-    "flipping" = unresolved
-    "ten" = unresolved
-
-  [SOLVED] CLUE: Public schoolboys welcoming southern Europeans (9)
-  ANSWER: ESTONIANS
-  DEFINITION: Europeans
-  FORMULA: S (southern) + ETONIANS (public schoolboys) = ESTONIANS
-  BREAKDOWN:
-    "public schoolboys" = ETONIANS (database phrase (synonym))
-    "welcoming" = container indicator
-    "southern" = S (database (single_letter))
-    "Europeans" = definition for ESTONIANS
-
-  [SOLVED] CLUE: Racecourse records only matter initially (5)
-  ANSWER: EPSOM
-  DEFINITION: Racecourse
-  FORMULA: EPS (records) + OM (only matter) = EPSOM
-  BREAKDOWN:
-    "Racecourse" = definition for EPSOM
-    "records" = EPS (database (synonym))
-    "only matter" = OM (first letters of)
-    "initially" = letter selector
-
-  [SOLVED] CLUE: Longs to skip English tales (5)
-  ANSWER: YARNS
-  DEFINITION: tales
-  FORMULA: YEARNS (Longs) = YARNS
-  BREAKDOWN:
-    "Longs" = YEARNS (database (synonym))
-    "to skip" = deletion_indicator
-    "English" = E (to be removed)
-    "tales" = definition for YARNS
-
-  [SOLVED] CLUE: Employment in America for one returning (5)
-  ANSWER: USAGE
-  DEFINITION: Employment
-  FORMULA: US (America) + AGE (one) = USAGE
-  BREAKDOWN:
-    "Employment" = definition for USAGE
-    "in" = hidden indicator
-    "America" = US (database (synonym))
-    "one" = AGE (database (synonym))
-    "returning" = reversal indicator
-    "for" = link word
-
-  [SOLVED] CLUE: Fan runs into Tiger Woods’s supporter Hazel? (3-4)
-  ANSWER: NUTTREE
-  DEFINITION: Hazel? (3-4)
-  FORMULA: NUT (Fan) + R (runs) + TEE (supporter) = NUTTREE
-  BREAKDOWN:
-    "Fan" = NUT (database (synonym))
-    "runs" = R (database (single_letter))
-    "supporter" = TEE (database (synonym))
-    "Hazel?" = definition for NUTTREE
-    "into" = link word
-    "Tiger" = wordplay connector
-    "Woods’s" = wordplay connector
-
-  [SOLVED] CLUE: Grubby family member aunt regularly ignored (7)
-  ANSWER: UNCLEAN
-  DEFINITION: Grubby
-  FORMULA: AN (aunt) + UNCLE (family member) = UNCLEAN
-  BREAKDOWN:
-    "Grubby" = definition for UNCLEAN
-    "family member" = UNCLE (database phrase (synonym))
-    "aunt" = AN (first letter of)
-    "regularly" = letter selector
-    "ignored" = letter selector
-
-  [PARTIAL] CLUE: Wide-ranging fear about old sheep (9)
-  ANSWER: PANORAMIC
-  DEFINITION: Wide-ranging
-  FORMULA: C (about) + PA (old) + RAM (sheep) + ? = PANORAMIC
-  BREAKDOWN:
-    "Wide-ranging" = definition for PANORAMIC
-    "about" = C (database (single_letter))
-    "old" = PA (database (synonym))
-    "sheep" = RAM (database (synonym))
-    "fear" = unresolved
-  LETTERS NEEDED: NOI
-
-  [SOLVED] CLUE: Call round after work to find missing peer (4,5)
-  ANSWER: 
-  DEFINITION: (not found)
-  FORMULA: ? = 
-  BREAKDOWN:
-    "round" = anagram indicator
-    "after" = anagram indicator
     "work" = anagram indicator
-    "Call" = unresolved
-    "to" = unresolved
-    "find" = unresolved
-    "missing" = unresolved
-    "peer" = unresolved
+    "Now" = unresolved
+    "their" = unresolved
+    "became" = unresolved
+    "less" = unresolved
+    "acceptable" = unresolved
 
-  [SOLVED] CLUE: Promising help, UFO goes off (7)
+  [PARTIAL] CLUE: One type of racing at venue for another — largely a shambles (6)
+  ANSWER: FIASCO
+  DEFINITION: a shambles
+  FORMULA: I (One) + OF + A (minus last letter of at) + ? = FIASCO
+  BREAKDOWN:
+    "One" = I (database (single_letter))
+    "of" = anagram fodder
+    "at" = A (minus last letter of at)
+    "for" = deletion indicator
+    "a" = definition for FIASCO
+    "shambles" = definition for FIASCO
+    "type" = unresolved
+    "racing" = unresolved
+    "venue" = unresolved
+    "another" = unresolved
+    "largely" = unresolved
+  LETTERS NEEDED: SC
+
+  [PARTIAL] CLUE: Slightly backtracking, show deference to biblical couple going steady (2,2,4,4)
+  ANSWER: ONANEVENKEEL
+  DEFINITION: going stead
+  FORMULA: EVEN (steady) + ? = ON AN EVEN KEEL
+  BREAKDOWN:
+    "to" = reversal indicator
+    "going" = definition for ON AN EVEN KEEL
+    "steady" = EVEN (database (synonym))
+    "Slightly" = unresolved
+    "backtracking," = unresolved
+    "show" = unresolved
+    "deference" = unresolved
+    "biblical" = unresolved
+    "couple" = unresolved
+  LETTERS NEEDED: OANNKEEL
+
+  [PARTIAL] CLUE: Escapes, just about, on hearing wife’s in the vicinity (4,6)
+  ANSWER: NEARMISSES
+  DEFINITION: Escapes, just about
+  FORMULA: ? = NEAR MISSES
+  BREAKDOWN:
+    "Escapes," = definition for NEAR MISSES
+    "just" = definition for NEAR MISSES
+    "about," = definition for NEAR MISSES
+    "in" = hidden indicator
+    "on" = unresolved
+    "hearing" = unresolved
+    "wife’s" = unresolved
+    "the" = unresolved
+    "vicinity" = unresolved
+  LETTERS NEEDED: NEARMISSES
+
+  [PARTIAL] CLUE: Bill’s old trouble (3)
+  ANSWER: ADO
+  DEFINITION: trouble
+  FORMULA: A (Bill’s) + O (old) + ? = ADO
+  BREAKDOWN:
+    "Bill’s" = A (database (synonym))
+    "old" = O (database (single_letter))
+    "trouble" = definition for ADO
+  LETTERS NEEDED: D
+
+  [PARTIAL] CLUE: Neckwear could be junk, mostly (3)
+  ANSWER: BOA
+  DEFINITION: Neckwear
+  FORMULA: ? = BOA
+  BREAKDOWN:
+    "Neckwear" = definition for BOA
+    "could" = unresolved
+    "be" = unresolved
+    "junk," = unresolved
+    "mostly" = unresolved
+  LETTERS NEEDED: BOA
+
+  [SOLVED] CLUE: Plant ground more millet (10)
   ANSWER: 
   DEFINITION: (not found)
   FORMULA: ? = 
   BREAKDOWN:
-    "goes" = anagram indicator
-    "off" = anagram indicator
-    "Promising" = unresolved
-    "help," = unresolved
-    "UFO" = unresolved
+    "Plant" = anagram indicator
+    "ground" = anagram indicator
+    "more" = unresolved
+    "millet" = unresolved
 
-  [SOLVED] CLUE: Ruler and politician admitted to base, heartless error (7)
-  ANSWER: EMPEROR
-  DEFINITION: Ruler
-  FORMULA: MP (politician) + E (base,) + EROR (minus middle letter of error) = EMPEROR
+  [PARTIAL] CLUE: Checking work from one of the Royals playing game? (12)
+  ANSWER: PROOFREADING
+  DEFINITION: Checking work
+  FORMULA: ONE + OF + ? = PROOFREADING
   BREAKDOWN:
-    "Ruler" = definition for EMPEROR
-    "politician" = MP (database (abbreviation))
-    "base," = E (database (single_letter))
-    "heartless" = deletion indicator
-    "error" = EROR (minus middle letter of error)
-    "and" = link word
-    "admitted" = wordplay connector
-    "to" = link word
+    "Checking" = definition for PROOFREADING
+    "work" = definition for PROOFREADING
+    "from" = hidden indicator
+    "one" = anagram fodder
+    "of" = anagram fodder
+    "the" = unresolved
+    "Royals" = unresolved
+    "playing" = unresolved
+    "game?" = unresolved
+  LETTERS NEEDED: PRRADIG
 
-  [SOLVED] CLUE: Exhausted, Tallinn’s out of bounds (3,2)
-  ANSWER: ALLIN
-  DEFINITION: Exhausted
-  FORMULA: ALLIN = ALL IN
+  [PARTIAL] CLUE: They may be in bed — one’s about to get up (6)
+  ANSWER: IRISES
+  DEFINITION: They may be in bed
+  FORMULA: I (one’s) + RISE (get) + ? = IRISES
   BREAKDOWN:
-    "Exhausted," = definition for ALL IN
-    "Tallinn’s" = ALLIN (minus outer letters)
-    "out" = truncation indicator
-    "of" = truncation indicator
-    "bounds" = truncation indicator
-
-  [PARTIAL] CLUE: Gently moves tea sets with no time at all (5)
-  ANSWER: EASES
-  DEFINITION: Gently moves
-  FORMULA: EAT (at) + ONE (all) + ? = EASES
-  BREAKDOWN:
-    "Gently" = definition for EASES
-    "moves" = definition for EASES
-    "no" = ON (to be removed)
-    "time" = T (to be removed)
-    "at" = EAT (database (synonym))
-    "all" = ONE (database (synonym))
-    "tea" = unresolved
-    "sets" = unresolved
-    "with" = unresolved
-  LETTERS NEEDED: SS
-
-  [SOLVED] CLUE: Tense hour with strange drone (5)
-  ANSWER: THRUM
-  DEFINITION: drone
-  FORMULA: t (Tense) + H (hour) + RUM (strange) = THRUM
-  BREAKDOWN:
-    "Tense" = T (database (abbreviation))
-    "hour" = H (database (single_letter))
-    "strange" = RUM (database (synonym))
-    "drone" = definition for THRUM
-    "with" = link word
-
-  [SOLVED] CLUE: Central point brought up to guest of honour (5)
-  ANSWER: PIVOT
-  DEFINITION: Central point
-  FORMULA: VIP (guest of honour) + TO = PIVOT
-  BREAKDOWN:
-    "Central" = definition for PIVOT
-    "point" = definition for PIVOT
-    "brought" = reversal indicator
+    "They" = definition for IRISES
+    "may" = definition for IRISES
+    "be" = definition for IRISES
+    "in" = definition for IRISES
+    "bed" = definition for IRISES
+    "one’s" = I (database (single_letter))
+    "to" = reversal indicator
+    "get" = RISE (database (synonym))
     "up" = reversal indicator
-    "to" = anagram fodder
-    "guest" = VIP (phrase "guest of honour" → VIP)
-    "of" =  ((part of "guest of honour"))
-    "honour" =  ((part of "guest of honour"))
+    "about" = unresolved
+  LETTERS NEEDED: S
+
+  [PARTIAL] CLUE: Like a teacher, used role-play at one college (8)
+  ANSWER: DIDACTIC
+  DEFINITION: Like a teacher
+  FORMULA: I (one) + AT + ? = DIDACTIC
+  BREAKDOWN:
+    "Like" = definition for DIDACTIC
+    "a" = definition for DIDACTIC
+    "teacher," = definition for DIDACTIC
+    "at" = anagram fodder
+    "one" = I (database (single_letter))
+    "used" = unresolved
+    "role-play" = unresolved
+    "college" = unresolved
+  LETTERS NEEDED: DDCIC
+
+  [SOLVED] CLUE: ‘That OK then?’ Lad rudely: ‘I’m not interested!’ (4,2,3,4)
+  ANSWER: 
+  DEFINITION: (not found)
+  FORMULA: ? = 
+  BREAKDOWN:
+    "rudely:" = anagram indicator
+    "not" = anagram indicator
+    "‘That" = unresolved
+    "OK" = unresolved
+    "then?’" = unresolved
+    "Lad" = unresolved
+    "‘I’m" = unresolved
+    "interested!’" = unresolved
+
+  [PARTIAL] CLUE: Admit money originally cut (4)
+  ANSWER: MOWN
+  DEFINITION: cut
+  FORMULA: OWN (Admit) + ? = MOWN
+  BREAKDOWN:
+    "Admit" = OWN (database (synonym))
+    "cut" = definition for MOWN
+    "money" = unresolved
+    "originally" = unresolved
+  LETTERS NEEDED: M
+
+  [PARTIAL] CLUE: Dangerous to leave hotel, which is spacious (4)
+  ANSWER: AIRY
+  DEFINITION: spacious
+  FORMULA: ? = AIRY
+  BREAKDOWN:
+    "to" = reversal indicator
+    "spacious" = definition for AIRY
+    "Dangerous" = unresolved
+    "leave" = unresolved
+    "hotel," = unresolved
+    "which" = unresolved
+    "is" = unresolved
+  LETTERS NEEDED: AIRY
+
+  [PARTIAL] CLUE: One fashionable piece of writing? Could be yes and no (8)
+  ANSWER: ANTONYMS
+  DEFINITION: Could be yes and no
+  FORMULA: A (One) + ? = ANTONYMS
+  BREAKDOWN:
+    "One" = A (database (single_letter))
+    "piece" = hidden indicator
+    "Could" = definition for ANTONYMS
+    "be" = definition for ANTONYMS
+    "yes" = definition for ANTONYMS
+    "and" = definition for ANTONYMS
+    "no" = definition for ANTONYMS
+    "fashionable" = unresolved
+    "of" = unresolved
+    "writing?" = unresolved
+  LETTERS NEEDED: NTONYMS
+
+  [PARTIAL] CLUE: Countryman’s pronounced stoop (5)
+  ANSWER: DEIGN
+  DEFINITION: stoop
+  FORMULA: ? = DEIGN
+  BREAKDOWN:
+    "pronounced" = homophone indicator
+    "stoop" = definition for DEIGN
+    "Countryman’s" = unresolved
+  LETTERS NEEDED: DEIGN
+
+  [PARTIAL] CLUE: Nag’s sounding off — wife cross (6)
+  ANSWER: WHINNY
+  DEFINITION: Nag's sounding off —
+  FORMULA: W (wife) + ? = WHINNY
+  BREAKDOWN:
+    "sounding" = definition for WHINNY
+    "off" = definition for WHINNY
+    "—" = definition for WHINNY
+    "wife" = W (database (single_letter))
+    "Nag’s" = unresolved
+    "cross" = unresolved
+  LETTERS NEEDED: HINNY
+
+  [PARTIAL] CLUE: Cutting through corruption, start to speak to meeting in a deeply emotional way (10)
+  ANSWER: VISCERALLY
+  DEFINITION: in a deeply emotional way
+  FORMULA: ALLEY (through) + S (speak) + ? = VISCERALLY
+  BREAKDOWN:
+    "Cutting" = container indicator
+    "through" = ALLEY (database (synonym))
+    "start" = letter selector
+    "to" = reversal indicator
+    "speak" = S (first letter of)
+    "in" = definition for VISCERALLY
+    "a" = definition for VISCERALLY
+    "deeply" = definition for VISCERALLY
+    "emotional" = definition for VISCERALLY
+    "way" = definition for VISCERALLY
+    "corruption," = unresolved
+    "meeting" = unresolved
+  LETTERS NEEDED: VICR
+
+  [PARTIAL] CLUE: Sentimental slush — see right through the German beauty queen? (4-6)
+  ANSWER: GOODLOOKER
+  DEFINITION: (not found)
+  FORMULA: LOOK (see) + GOOD (right) + R (queen?) + ? = GOODLOOKER
+  BREAKDOWN:
+    "see" = LOOK (database (synonym))
+    "right" = GOOD (database (synonym))
+    "queen?" = R (database (single_letter))
+    "Sentimental" = unresolved
+    "slush" = unresolved
+    "through" = unresolved
+    "the" = unresolved
+    "German" = unresolved
+    "beauty" = unresolved
+  LETTERS NEEDED: E
+
+  [PARTIAL] CLUE: Poet taking sweetheart round Spanish city (6)
+  ANSWER: OVIEDO
+  DEFINITION: Spanish city
+  FORMULA: OVID (Poet) + O (round) + ? = OVIEDO
+  BREAKDOWN:
+    "Poet" = OVID (database (synonym))
+    "taking" = container indicator
+    "round" = O (database (misc))
+    "Spanish" = definition for OVIEDO
+    "city" = definition for OVIEDO
+    "sweetheart" = unresolved
+  LETTERS NEEDED: E
+
+  [PARTIAL] CLUE: Protestant archbishop’s first proscription overturned — past it sadly (10)
+  ANSWER: ANABAPTIST
+  DEFINITION: Protestant
+  FORMULA: P (proscription) + IT + ? = ANABAPTIST
+  BREAKDOWN:
+    "Protestant" = definition for ANABAPTIST
+    "first" = letter selector
+    "proscription" = P (first letter of)
+    "it" = anagram fodder
+    "archbishop’s" = unresolved
+    "overturned" = unresolved
+    "past" = unresolved
+    "sadly" = unresolved
+  LETTERS NEEDED: ANABAST
+
+  [PARTIAL] CLUE: Can you connect with this form of humour? (10)
+  ANSWER: LAVATORIAL
+  DEFINITION: form of humour?
+  FORMULA: A (Can) + TO (with) + ? = LAVATORIAL
+  BREAKDOWN:
+    "Can" = A (database (synonym))
+    "with" = TO (database (synonym))
+    "form" = definition for LAVATORIAL
+    "of" = definition for LAVATORIAL
+    "humour?" = definition for LAVATORIAL
+    "you" = unresolved
+    "connect" = unresolved
+    "this" = unresolved
+  LETTERS NEEDED: LVARIAL
+
+  [PARTIAL] CLUE: Half, nearly three quarters of words explosive (6)
+  ANSWER: SEMTEX
+  DEFINITION: explosive
+  FORMULA: ? = SEMTEX
+  BREAKDOWN:
+    "explosive" = definition for SEMTEX
+    "Half," = unresolved
+    "nearly" = unresolved
+    "three" = unresolved
+    "quarters" = unresolved
+    "of" = unresolved
+    "words" = unresolved
+  LETTERS NEEDED: SEMTEX
+
+  [PARTIAL] CLUE: United lifted in first leg a long time ago (5,3)
+  ANSWER: STONEAGE
+  DEFINITION: long time ago
+  FORMULA: ONE (United) + A (a) + ? = STONE AGE
+  BREAKDOWN:
+    "United" = ONE (database (synonym))
+    "lifted" = reversal indicator
+    "in" = hidden indicator
+    "first" = letter selector
+    "a" = A (first letter of)
+    "long" = definition for STONE AGE
+    "time" = definition for STONE AGE
+    "ago" = definition for STONE AGE
+    "leg" = unresolved
+  LETTERS NEEDED: STGE
+
+  [SOLVED] CLUE: Move French regularly interrupting at the back (6)
+  ANSWER: AFFECT
+  DEFINITION: Move
+  FORMULA: AFT (back) + FEC (French) = AFFECT
+  BREAKDOWN:
+    "Move" = definition for AFFECT
+    "French" = FEC (odd letters of French)
+    "regularly" = alternating indicator
+    "back" = AFT (database (synonym))
+    "interrupting" = wordplay connector
+    "at" = link word
+    "the" = link word
+
+  [SOLVED] CLUE: Tenor Domingo’s initial break (5)
+  ANSWER: DRIFT
+  DEFINITION: Tenor
+  FORMULA: D (Domingo’s) + RIFT (break) = DRIFT
+  BREAKDOWN:
+    "Tenor" = definition for DRIFT
+    "Domingo’s" = D (first letter of)
+    "initial" = letter selector
+    "break" = RIFT (database (synonym))
+
+  [PARTIAL] CLUE: Given up before, this smoker (4)
+  ANSWER: ETNA
+  DEFINITION: smoker
+  FORMULA: ? = ETNA
+  BREAKDOWN:
+    "up" = reversal indicator
+    "smoker" = definition for ETNA
+    "Given" = unresolved
+    "before," = unresolved
+    "this" = unresolved
+  LETTERS NEEDED: ETNA
 
 ================================================================================
 END OF REPORT
